@@ -126,6 +126,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the retrieved passages and their scores before answering",
     )
+    ask.add_argument(
+        "--json",
+        action="store_true",
+        help="ask the model for a structured JSON answer (reliable steps and "
+        "citations; best with a capable model, falls back to prose otherwise)",
+    )
 
     evaluate_cmd = subparsers.add_parser(
         "eval",
@@ -261,7 +267,7 @@ def _cmd_ask(args: argparse.Namespace) -> int:
     index = Index.from_dict(json.loads(fs.read_text(config.index_path)))
     embedder = _make_embedder(config)
     llm = _make_llm(config)
-    engine = QueryEngine(embedder, llm, config)
+    engine = QueryEngine(embedder, llm, config, structured=args.json)
 
     prep = engine.prepare(index, args.question)
     if args.show_retrieved:
@@ -270,7 +276,8 @@ def _cmd_ask(args: argparse.Namespace) -> int:
         print(NOT_FOUND_MESSAGE)
         return 0
 
-    if args.no_stream:
+    # A JSON reply cannot be streamed legibly, so it is collected in full.
+    if args.no_stream or args.json:
         answer_text = llm.complete(prep.messages)
     else:
         chunks: list[str] = []
@@ -282,10 +289,14 @@ def _cmd_ask(args: argparse.Namespace) -> int:
         answer_text = "".join(chunks)
 
     answer = engine.assemble(prep, answer_text)
-    if args.no_stream:
-        # Streaming already printed the raw text live; for the buffered path show
-        # the answer with citation markers and any stray not-found line removed.
-        print(clean_answer_text(answer.text, NOT_FOUND_MESSAGE))
+    if args.no_stream or args.json:
+        # Streaming already printed the raw text live; for the buffered and JSON
+        # paths show the rendered answer, markers and any stray not-found line
+        # removed. A not-found JSON reply collapses to the standard message.
+        if not answer.found:
+            print(NOT_FOUND_MESSAGE)
+        else:
+            print(clean_answer_text(answer.text, NOT_FOUND_MESSAGE))
     _print_provenance(answer)
     return 0
 
@@ -333,7 +344,12 @@ def _print_provenance(answer: Answer) -> None:
         print(f"\nReferenced identifiers: {identifiers}")
     if answer.citations:
         print("\nSources:")
+        seen: set[tuple[str, int, str | None]] = set()
         for citation in answer.citations:
+            key = (citation.source_path, citation.page, citation.section)
+            if key in seen:
+                continue
+            seen.add(key)
             location = f"page {citation.page}"
             if citation.section:
                 location += f", section: {citation.section}"

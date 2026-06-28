@@ -43,7 +43,7 @@ from .models import (
     TextBlock,
     Vector,
 )
-from .prompt import NOT_FOUND_MESSAGE, PromptBuilder
+from .prompt import NOT_FOUND_MESSAGE, STRUCTURED_SYSTEM_PROMPT, PromptBuilder
 from .protocols import (
     DiagramAnalyzer,
     DocumentParser,
@@ -54,6 +54,7 @@ from .protocols import (
     VectorStore,
 )
 from .retrieval import retrieve
+from .structured import StructuredAnswer, parse_structured, render_answer_text
 from .vector_store import InMemoryVectorStore, cosine_similarity
 
 __all__ = [
@@ -88,7 +89,9 @@ __all__ = [
     "PromptBuilder",
     "QueryEngine",
     "RetrievalConfig",
+    "STRUCTURED_SYSTEM_PROMPT",
     "ScoredChunk",
+    "StructuredAnswer",
     "TextBlock",
     "UnsupportedDocumentError",
     "Vector",
@@ -98,6 +101,8 @@ __all__ = [
     "cosine_similarity",
     "embedding_text",
     "not_found_answer",
+    "parse_structured",
+    "render_answer_text",
     "retrieve",
     "strip_citation_markers",
 ]

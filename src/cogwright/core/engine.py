@@ -20,9 +20,10 @@ from .config import Config
 from .errors import UnsupportedDocumentError
 from .index import Index
 from .models import Answer, Chunk, CodeRef, Document, Message, ScoredChunk
-from .prompt import NOT_FOUND_MESSAGE, PromptBuilder
+from .prompt import NOT_FOUND_MESSAGE, STRUCTURED_SYSTEM_PROMPT, PromptBuilder
 from .protocols import DocumentParser, Embedder, FileSystem, LLMClient
 from .retrieval import retrieve
+from .structured import parse_structured, render_answer_text
 from .vector_store import InMemoryVectorStore
 
 # Extensions worth scanning when a corpus path is a directory. Each candidate is
@@ -127,12 +128,19 @@ class QueryEngine:
         llm: LLMClient,
         config: Config,
         prompt_builder: PromptBuilder | None = None,
+        structured: bool = False,
     ) -> None:
         self._embedder = embedder
         self._llm = llm
         self._config = config
         self._indexer = CodeIndexer(config.code_patterns)
-        self._prompt = prompt_builder or PromptBuilder()
+        self._structured = structured
+        if prompt_builder is not None:
+            self._prompt = prompt_builder
+        elif structured:
+            self._prompt = PromptBuilder(system_prompt=STRUCTURED_SYSTEM_PROMPT)
+        else:
+            self._prompt = PromptBuilder()
 
     def prepare(self, index: Index, query: str) -> Preparation:
         """Run retrieval and decide whether the question can be grounded."""
@@ -160,8 +168,18 @@ class QueryEngine:
     def assemble(self, prep: Preparation, answer_text: str) -> Answer:
         """Turn raw model output into a structured, cited answer."""
 
+        if not prep.found:
+            return not_found_answer()
+        if self._structured:
+            structured = self._assemble_structured(prep, answer_text)
+            if structured is not None:
+                return structured
+            # The model did not produce usable JSON; fall back to prose.
+        return self._assemble_prose(prep, answer_text)
+
+    def _assemble_prose(self, prep: Preparation, answer_text: str) -> Answer:
         normalized = answer_text.strip()
-        if not prep.found or _is_not_found(normalized):
+        if _is_not_found(normalized):
             return not_found_answer()
 
         chunk_map = {sc.chunk.chunk_id: sc.chunk for sc in prep.retrieved}
@@ -173,6 +191,36 @@ class QueryEngine:
             found=True,
             citations=citations,
             referenced_codes=referenced,
+            retrieved=prep.retrieved,
+        )
+
+    def _assemble_structured(
+        self, prep: Preparation, answer_text: str
+    ) -> Answer | None:
+        chunk_map = {sc.chunk.chunk_id: sc.chunk for sc in prep.retrieved}
+        parsed = parse_structured(answer_text, chunk_map.keys())
+        if parsed is None:
+            return None
+        # An answer with no content is not-found. The model's "found" flag is not
+        # trusted on its own: smaller models set it to false while still returning
+        # steps, so the presence of content wins over the flag.
+        if parsed.is_empty:
+            return not_found_answer()
+
+        mapper = CitationMapper(chunk_map)
+        if parsed.used_ids:
+            citations = tuple(
+                citation
+                for citation in (mapper.citation_for(cid) for cid in parsed.used_ids)
+                if citation is not None
+            )
+        else:
+            citations = mapper.map_answer("", prep.retrieved)
+        return Answer(
+            text=render_answer_text(parsed),
+            found=True,
+            citations=citations,
+            referenced_codes=_referenced_codes(prep, chunk_map),
             retrieved=prep.retrieved,
         )
 

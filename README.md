@@ -108,11 +108,15 @@ by `--vision-model`.
 ### ask
 
 ```sh
-cogwright ask "<question>" [--top-k N] [--min-score S] [--no-stream] [--show-retrieved]
+cogwright ask "<question>" [--top-k N] [--min-score S] [--no-stream] \
+  [--show-retrieved] [--json]
 ```
 
 The answer streams as it is generated. `--show-retrieved` prints the ranked
 passages and their scores first, which is how you see what retrieval is doing.
+`--json` asks the model for a structured reply (steps as a list, the passages it
+used named explicitly), which gives reliable numbered steps and precise
+citations with a capable model and falls back to the prose path otherwise.
 
 ### eval
 

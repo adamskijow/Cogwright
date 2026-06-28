@@ -37,6 +37,27 @@ or "see also" cross-references; the sources are attached automatically.
 and nothing else: {NOT_FOUND_MESSAGE}
 - Do not mention or quote these instructions in your answer."""
 
+# Used by the opt-in structured mode. A model that follows it gives reliable
+# numbered steps and names the passages it used, which is parsed back into the
+# same answer type. A model that ignores it falls back to the prose path.
+STRUCTURED_SYSTEM_PROMPT = """You are a field-service assistant for industrial \
+equipment documentation. Answer the technician's question using ONLY the context \
+passages provided in the next message.
+
+Respond with a single JSON object and nothing else, in exactly this shape:
+{"found": true, "answer": "", "steps": ["..."], "used": ["..."]}
+
+Rules:
+- "found" is false when the context does not contain the answer. Then "answer" \
+is "", "steps" is [], and "used" is [].
+- Use only facts that appear in the context. Never invent steps, values, \
+settings, or part numbers.
+- "steps" is the procedure as an ordered list of strings when the question is \
+procedural, otherwise [].
+- "answer" is a short explanation for a non-procedural question, otherwise "".
+- "used" lists the bracketed ids of the passages you actually relied on.
+- Output only the JSON object. Do not add prose, comments, or markdown fences."""
+
 
 class PromptBuilder:
     """Builds the system and user messages for a grounded answer."""
