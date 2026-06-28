@@ -192,6 +192,12 @@ def not_found_answer() -> Answer:
     return Answer(text=NOT_FOUND_MESSAGE, found=False)
 
 
+# How much extra text around the not-found sentence still counts as a not-found
+# reply, allowing a short lead-in like "Unfortunately," without matching a real
+# answer that only mentions the phrase.
+_NOT_FOUND_SLACK_CHARS = 30
+
+
 def _is_not_found(answer_text: str) -> bool:
     """Whether a model reply is really the not-found sentence.
 
@@ -206,7 +212,7 @@ def _is_not_found(answer_text: str) -> bool:
         return False
     if core == target:
         return True
-    return target in core and len(core) <= len(target) + 30
+    return target in core and len(core) <= len(target) + _NOT_FOUND_SLACK_CHARS
 
 
 def _referenced_codes(

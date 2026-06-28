@@ -157,7 +157,7 @@ def _add_common_args(sub: argparse.ArgumentParser) -> None:
     sub.add_argument(
         "--base-url",
         default=os.environ.get("COGWRIGHT_BASE_URL"),
-        help="base URL of the model and embedding HTTP endpoint",
+        help="base URL of the OpenAI-compatible endpoint",
     )
     sub.add_argument(
         "--api-key",

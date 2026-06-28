@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 The Cogwright Authors
-"""Reference LLM and embedding clients for a configurable HTTP endpoint.
+"""Reference LLM and embedding clients for an OpenAI-compatible HTTP endpoint.
 
-They speak the widely used JSON shape for chat completions and embeddings, over
+They speak the OpenAI-compatible chat-completions and embeddings JSON API, over
 the routes ``/v1/chat/completions`` and ``/v1/embeddings``, using only the
 standard library. The tool therefore pulls in no model SDK and stays
 offline-capable: the single network destination is the endpoint the user
 configures. That endpoint can be a model server running on the same machine or a
-remote one reached by base URL and key; no provider is hardwired. Connection
-failures are surfaced as :class:`ModelUnavailableError` so the CLI can report
-them cleanly.
+remote one reached by base URL and key; the implementation is not tied to any one
+provider. Connection failures are surfaced as :class:`ModelUnavailableError` so
+the CLI can report them cleanly.
 """
 
 from __future__ import annotations

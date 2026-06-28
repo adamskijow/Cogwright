@@ -109,7 +109,7 @@ class RetrievalConfig:
 
 @dataclass(frozen=True)
 class EndpointConfig:
-    """Where to reach the chat-completions and embeddings HTTP endpoint.
+    """Where to reach the OpenAI-compatible model and embedding endpoint.
 
     Defaults target a model server on the local machine. No network call is made
     except to this user-configured endpoint. The model names are placeholders;
