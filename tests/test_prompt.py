@@ -39,6 +39,8 @@ def test_system_message_states_the_grounding_rules() -> None:
     assert "ONLY" in system.content
     assert "numbered steps" in system.content
     assert NOT_FOUND_MESSAGE in system.content
+    # The model is told to give only the answer, not to write its own citations.
+    assert "page numbers" in system.content
 
 
 def test_user_message_includes_question_and_every_passage() -> None:
@@ -50,9 +52,11 @@ def test_user_message_includes_question_and_every_passage() -> None:
     assert "how do I start it" in user.content
     for sc in scored:
         assert f"[{sc.chunk.chunk_id}]" in user.content
-        assert f"page {sc.chunk.page}" in user.content
         assert sc.chunk.section is not None
         assert sc.chunk.section in user.content
+        # The source path and page are kept out of the prompt so the model does
+        # not copy them into the answer; provenance is attached from retrieval.
+        assert sc.chunk.source_path not in user.content
     # The identifier on the alarm passage is surfaced to the model.
     assert "AL-204" in user.content
 

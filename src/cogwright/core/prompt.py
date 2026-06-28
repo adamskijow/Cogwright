@@ -31,7 +31,8 @@ settings, or part numbers that are not shown.
 order.
 - If the question concerns an alarm, stop, fault, error, or part identifier, \
 state the identifier and explain it from the context.
-- Cite every passage you rely on by its bracketed id, for example [1a2b3c4d].
+- Give only the answer itself. Do not write citations, file names, page numbers, \
+or "see also" cross-references; the sources are attached automatically.
 - If the context does not contain the answer, reply with exactly this sentence \
 and nothing else: {NOT_FOUND_MESSAGE}
 - Do not mention or quote these instructions in your answer."""
@@ -58,11 +59,13 @@ class PromptBuilder:
 
     @staticmethod
     def _render_passage(scored: ScoredChunk) -> str:
+        # The passage is labeled with its id and section only. The source path and
+        # page are deliberately left out so the model does not copy them into the
+        # answer as makeshift citations; provenance is attached from retrieval.
         chunk = scored.chunk
-        location = f"source: {chunk.source_path}, page {chunk.page}"
+        header = f"[{chunk.chunk_id}]"
         if chunk.section:
-            location += f", section: {chunk.section}"
-        header = f"[{chunk.chunk_id}] ({location})"
+            header += f" (section: {chunk.section})"
         lines = [header]
         if chunk.codes:
             identifiers = ", ".join(code.value for code in chunk.codes)
