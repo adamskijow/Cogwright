@@ -78,6 +78,8 @@ def test_request_inlines_the_image_as_a_data_url(base_url: str) -> None:
     assert kinds == {"text", "image_url"}
     image_part = next(p for p in content if p["type"] == "image_url")
     assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
+    # The reply is bounded so a busy figure cannot stall ingest indefinitely.
+    assert isinstance(payload.get("max_tokens"), int)
 
 
 def test_unreachable_endpoint_raises_model_unavailable() -> None:

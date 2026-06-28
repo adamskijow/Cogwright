@@ -45,6 +45,7 @@ class PdfDocumentParser:
         ocr_image_ratio: float = 0.5,
         diagram_analyzer: DiagramAnalyzer | None = None,
         diagram_min_image_ratio: float = 0.1,
+        diagram_dpi: int = 110,
     ) -> None:
         # When no engine is supplied, scanned pages are skipped rather than
         # guessed at, keeping born-digital behavior identical to before.
@@ -62,6 +63,9 @@ class PdfDocumentParser:
         # at least this fraction of it, so a small logo does not trigger work.
         self._diagram_analyzer = diagram_analyzer
         self._diagram_min_image_ratio = diagram_min_image_ratio
+        # Diagrams are rendered smaller than OCR pages: vision models downscale
+        # internally anyway, and a smaller image keeps the request fast.
+        self._diagram_dpi = diagram_dpi
 
     def supports(self, path: str) -> bool:
         return path.lower().endswith(".pdf")
@@ -135,8 +139,9 @@ class PdfDocumentParser:
             self._diagram_analyzer is not None
             and image_ratio >= self._diagram_min_image_ratio
         ):
+            # Reuse the OCR render if it was made; otherwise render smaller.
             if rendered is None:
-                rendered = _render_png(page, self._ocr_dpi)
+                rendered = _render_png(page, self._diagram_dpi)
             for caption in self._diagram_analyzer.describe(rendered):
                 text_value = caption.strip()
                 if text_value:

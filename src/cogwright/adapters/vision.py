@@ -35,10 +35,14 @@ class VisionDiagramAnalyzer:
         api_key: str | None = None,
         timeout: float = 60.0,
         prompt: str = _PROMPT,
+        max_tokens: int = 512,
     ) -> None:
         self._endpoint = HttpEndpoint(base_url, api_key, timeout)
         self._model = model
         self._prompt = prompt
+        # Bound the reply so a model told to "transcribe everything" cannot run on
+        # indefinitely, which otherwise stalls a whole ingest on one busy figure.
+        self._max_tokens = max_tokens
 
     def describe(self, image: bytes) -> list[str]:
         data_url = "data:image/png;base64," + base64.b64encode(image).decode("ascii")
@@ -54,6 +58,7 @@ class VisionDiagramAnalyzer:
                 }
             ],
             "temperature": 0.0,
+            "max_tokens": self._max_tokens,
             "stream": False,
         }
         data = self._endpoint.post_json("chat/completions", payload)
