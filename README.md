@@ -235,7 +235,9 @@ uv run mypy            # strict static type checking
 uv run ruff check .    # lint and import order
 ```
 
-No live model is used in the tests. The same three checks run in continuous
+No live model is used in the tests. The reference optical-recognition engine is
+covered by tests that run only when the `ocr` extra and the recognition binary
+are present, and are skipped otherwise. The same three checks run in continuous
 integration on every push and pull request.
 
 ## Licensing
