@@ -19,12 +19,19 @@ from __future__ import annotations
 
 import io
 import os
+import re
+from collections import Counter
 from typing import Any
 
 from ..core.errors import CogwrightError
 from ..core.models import BlockKind, Document, TextBlock
 from ..core.protocols import DiagramAnalyzer, OcrEngine
 from .text_parser import parse_lines
+
+# A line counts as a running header or footer when its digit-normalized form
+# repeats on at least this fraction of pages (with a small floor for short docs).
+_HEADER_FOOTER_FRACTION = 10
+_HEADER_FOOTER_MIN_PAGES = 4
 
 
 class PdfDocumentParser:
@@ -72,8 +79,17 @@ class PdfDocumentParser:
         title: str | None = None
 
         with pdfplumber.open(io.BytesIO(data)) as pdf:
-            for page_number, page in enumerate(pdf.pages, start=1):
-                for block in self._page_blocks(page, page_number):
+            # First pass: pull the text and tables from every page. Second pass
+            # builds blocks after the running headers and footers that repeat
+            # across pages have been identified and removed.
+            pages = [
+                (page, number, *self._extract_text_and_tables(page))
+                for number, page in enumerate(pdf.pages, start=1)
+            ]
+            repeating = _repeating_header_footer([text for _, _, text, _ in pages])
+            for page, number, text, tables in pages:
+                cleaned = _strip_repeating(text, repeating)
+                for block in self._build_blocks(page, number, cleaned, tables):
                     if title is None and block.kind == BlockKind.HEADING:
                         title = block.text
                     blocks.append(block)
@@ -85,19 +101,21 @@ class PdfDocumentParser:
             blocks=tuple(blocks),
         )
 
-    def _page_blocks(self, page: Any, page_number: int) -> list[TextBlock]:
+    def _extract_text_and_tables(self, page: Any) -> tuple[str, list[Any]]:
         tables = page.find_tables()
         bboxes = [table.bbox for table in tables]
-
         # Extract the running text from the part of the page that is not inside a
         # table, so table cells are not also chunked as paragraphs. Without this,
         # the same table content would be indexed twice.
         if bboxes:
-            text_page = page.filter(lambda obj: not _inside_any(obj, bboxes))
-            text = text_page.extract_text() or ""
+            text = page.filter(lambda obj: not _inside_any(obj, bboxes)).extract_text()
         else:
-            text = page.extract_text() or ""
+            text = page.extract_text()
+        return text or "", list(tables)
 
+    def _build_blocks(
+        self, page: Any, page_number: int, text: str, tables: list[Any]
+    ) -> list[TextBlock]:
         image_ratio = _image_area_ratio(page)
         # The rendered page image is shared by the OCR and diagram passes so a
         # page that needs both is only rasterized once.
@@ -136,6 +154,55 @@ class PdfDocumentParser:
         if len(text.strip()) >= self._ocr_min_chars:
             return False
         return image_ratio >= self._ocr_image_ratio
+
+
+def _normalize_line(line: str) -> str:
+    """Collapse digits so "EDITOR 4-111" and "EDITOR 6-205" compare as equal."""
+
+    return re.sub(r"\d+", "#", line.strip())
+
+
+def _repeating_header_footer(texts: list[str]) -> frozenset[str]:
+    """Find the normalized first and last lines that repeat across many pages.
+
+    Running headers and footers (chapter titles, page numbers, revision dates)
+    sit at the top or bottom of most pages and add noise to every chunk. A line
+    is treated as one when its digit-normalized form recurs widely.
+    """
+
+    first: Counter[str] = Counter()
+    last: Counter[str] = Counter()
+    for text in texts:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            continue
+        first[_normalize_line(lines[0])] += 1
+        if len(lines) > 1:
+            last[_normalize_line(lines[-1])] += 1
+
+    threshold = max(_HEADER_FOOTER_MIN_PAGES, len(texts) // _HEADER_FOOTER_FRACTION)
+    repeating = {norm for norm, n in first.items() if norm and n >= threshold}
+    repeating |= {norm for norm, n in last.items() if norm and n >= threshold}
+    return frozenset(repeating)
+
+
+def _strip_repeating(text: str, repeating: frozenset[str]) -> str:
+    """Remove the leading and trailing line when it is a known header or footer."""
+
+    if not repeating:
+        return text
+    lines = text.splitlines()
+    nonempty = [i for i, line in enumerate(lines) if line.strip()]
+    if not nonempty:
+        return text
+    drop: set[int] = set()
+    if _normalize_line(lines[nonempty[0]]) in repeating:
+        drop.add(nonempty[0])
+    if len(nonempty) > 1 and _normalize_line(lines[nonempty[-1]]) in repeating:
+        drop.add(nonempty[-1])
+    if not drop:
+        return text
+    return "\n".join(line for i, line in enumerate(lines) if i not in drop)
 
 
 def _image_area_ratio(page: Any) -> float:

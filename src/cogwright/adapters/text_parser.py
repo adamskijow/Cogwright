@@ -20,6 +20,13 @@ _STEP = re.compile(r"^\s*(?:\d+[.)]\s+|step\s+\d+\b)", re.IGNORECASE)
 _ATX_HEADING = re.compile(r"^\s*#{1,6}\s+(?P<text>.+?)\s*#*\s*$")
 _SEPARATOR_CELL = re.compile(r"^:?-{2,}:?$")
 
+# A run of spaced dots or dashes is a table-of-contents leader.
+_DOT_LEADER = re.compile(r"(?:[.·]\s?){4,}|(?:-\s){3,}")
+# A trailing "chapter-page" reference, e.g. "4-111", "6-205", or "EDITOR4-133"
+# where the title and number ran together, marks a contents entry or a running
+# page header rather than a real heading.
+_TRAILING_PAGE_REF = re.compile(r"\d+\s*[-–]\s*\d+\s*$")
+
 
 class TextDocumentParser:
     """Parses ``.txt``, ``.text``, and ``.md`` documents into normalized blocks."""
@@ -82,6 +89,12 @@ def parse_lines(page_text: str, page: int) -> list[TextBlock]:
             i += 1
             continue
 
+        # Drop table-of-contents lines outright; they are navigation, not content.
+        if _is_navigation_line(stripped):
+            flush_paragraph()
+            i += 1
+            continue
+
         if "|" in line and _looks_like_table_row(line):
             flush_paragraph()
             table_lines: list[str] = []
@@ -117,6 +130,11 @@ def _heading_text(stripped: str) -> str | None:
     atx = _ATX_HEADING.match(stripped)
     if atx:
         return atx.group("text").strip()
+    # Table-of-contents entries and running page headers ("EDITOR 4-111",
+    # "INTRODUCTION - - - - 1-1") are all-caps too, so they would otherwise be
+    # mistaken for headings and pollute the section context. Reject them.
+    if _DOT_LEADER.search(stripped) or _TRAILING_PAGE_REF.search(stripped):
+        return None
     # An all-caps line with no terminal punctuation reads as a section heading,
     # which matches how plain-text equipment manuals are typically laid out.
     has_letter = any(c.isalpha() for c in stripped)
@@ -128,6 +146,12 @@ def _heading_text(stripped: str) -> str | None:
     ):
         return stripped
     return None
+
+
+def _is_navigation_line(stripped: str) -> bool:
+    """Whether a line is contents-page navigation rather than content."""
+
+    return bool(_DOT_LEADER.search(stripped) and _TRAILING_PAGE_REF.search(stripped))
 
 
 def _looks_like_table_row(line: str) -> bool:

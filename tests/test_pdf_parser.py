@@ -98,3 +98,29 @@ def test_codes_resolve_after_chunking_a_pdf() -> None:
     values = {code.value for chunk in chunks for code in chunk.codes}
     assert "AL-204" in values
     assert "PN-44-19A" in values
+
+
+def _running_header_pdf(pages: int = 10) -> bytes:
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=LETTER)
+    for n in range(1, pages + 1):
+        pdf.drawString(72, 740, "MAINTENANCE GUIDE 7-" + str(n))  # running header
+        pdf.drawString(72, 400, f"Unique body sentence number {n} about the pump.")
+        pdf.drawString(72, 40, "Last Updated 2017 page " + str(n))  # running footer
+        pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
+def test_running_headers_and_footers_are_stripped() -> None:
+    doc = PdfDocumentParser().parse("guide.pdf", _running_header_pdf())
+    text = "\n".join(b.text for b in doc.blocks)
+
+    # The header and footer that repeat on every page are removed everywhere.
+    assert "MAINTENANCE GUIDE" not in text
+    assert "Last Updated" not in text
+    # The unique per-page body content survives.
+    assert "Unique body sentence number 5 about the pump." in text

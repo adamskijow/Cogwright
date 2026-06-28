@@ -56,6 +56,25 @@ def test_pipe_table_is_parsed_with_rows() -> None:
     assert "PN 44-19A" in flattened
 
 
+def test_contents_and_page_header_lines_are_not_headings() -> None:
+    body = (
+        "INTRODUCTION - - - - - - - - 1-1\n"
+        "EDITOR 4-111\n"
+        "EDITOR4-133\n"
+        "REAL SECTION HEADING\n"
+        "Some body text follows.\n"
+    )
+    doc = TextDocumentParser().parse("manual.txt", body.encode("utf-8"))
+    headings = [b.text for b in doc.blocks if b.kind == BlockKind.HEADING]
+    text = "\n".join(b.text for b in doc.blocks)
+
+    assert headings == ["REAL SECTION HEADING"]
+    # The dot-leader contents line is dropped entirely as navigation.
+    assert "INTRODUCTION" not in text
+    # Running page headers are demoted from headings (kept as plain text here).
+    assert "4-111" not in {*headings}
+
+
 def test_markdown_atx_heading_and_inline_table() -> None:
     md = "# Maintenance\n\nDo a check.\n\n| Item | Value |\n| --- | --- |\n| Torque | 40 Nm |\n"
     doc = TextDocumentParser().parse("note.md", md.encode("utf-8"))
