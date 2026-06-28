@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 The Cogwright Authors
+
+[project]
+name = "cogwright"
+version = "0.1.0"
+description = "Local-first retrieval engine for technical equipment documentation."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "The Cogwright Authors" }]
+keywords = [
+    "retrieval",
+    "rag",
+    "documentation",
+    "equipment",
+    "field-service",
+    "offline",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Indexing",
+]
+
+# Runtime dependencies are deliberately minimal and permissively licensed.
+# The pure core (src/cogwright/core) imports none of these; only the adapter
+# layer that performs real I/O depends on pdfplumber. Everything else, including
+# the HTTP client for the model endpoint and the vector math, uses the standard
+# library so the tool stays small and offline-capable.
+dependencies = [
+    # pdfplumber (MIT) parses born-digital PDFs including tables. It is built on
+    # pdfminer.six (MIT) and Pillow (HPND), both permissive. We avoid AGPL PDF
+    # toolkits on purpose to keep the dependency tree MIT-compatible.
+    "pdfplumber>=0.11.4",
+]
+
+[project.scripts]
+cogwright = "cogwright.cli.main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cogwright"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+files = ["src", "tests"]
+
+# pdfplumber ships without type information; the adapter that uses it is the
+# only place we tolerate untyped imports, isolated here.
+[[tool.mypy.overrides]]
+module = ["pdfplumber", "pdfplumber.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --cov=cogwright --cov-report=term-missing"
