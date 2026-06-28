@@ -40,9 +40,9 @@ The scope is deliberately one slice, done well.
   endpoint you choose. There is no required cloud service.
 - **No telemetry.** The tool collects and transmits nothing about you or your
   corpus.
-- **One network destination.** The only outbound calls are to the single model
-  and embedding endpoint you configure. That endpoint can run on the same
-  machine, so a fully air-gapped deployment is possible.
+- **One network destination.** The only outbound calls are to the single
+  endpoint you configure for the model, embeddings, and vision. That endpoint can
+  run on the same machine, so a fully air-gapped deployment is possible.
 
 Your documents stay where you put them, and the index is a plain file on your
 disk.
@@ -56,18 +56,18 @@ Out of the box, with no extra dependencies:
 - born-digital PDFs (`.pdf`), including tables, where the page has a real text
   layer.
 
-Scanned and photographed PDF pages (no text layer) are supported through an
-optional optical-recognition engine. Install the extra and recognized text is
-structured exactly like born-digital text:
+Two richer paths sit behind the same parser seam and are enabled per ingest:
 
-```sh
-uv sync --extra ocr
-```
+- **Scanned and photographed PDF pages** (no text layer) are recognized through
+  an optical-recognition engine. Install the extra (`uv sync --extra ocr`) and a
+  scanned page's text is structured exactly like born-digital text.
+- **Diagram and exploded-parts callouts** are transcribed by a multimodal vision
+  model, so the labels and part numbers printed on a figure become retrievable.
+  This uses the same endpoint and no extra dependency.
 
-Recognition quality depends on the engine and the scan, so this path is newer
-than the born-digital one. Exploded-diagram region understanding is still future
-work; see the [roadmap](#roadmap). Both sit behind the same parser seam, so they
-were added, and can be extended, without touching the core.
+Both are newer than the born-digital path and their quality depends on the
+engine, the scan, and the model. Neither changes default behavior: without the
+extra or the flag, those pages are handled as before.
 
 ## Installation
 
@@ -85,10 +85,11 @@ library.
 
 ## Pointing it at a model endpoint
 
-Cogwright is model-agnostic. The reference client speaks the common JSON shape
-for chat completions and embeddings over the routes `/v1/chat/completions` and
-`/v1/embeddings`. Any local or remote model server that exposes that shape works;
-no provider is hardwired.
+Cogwright is model-agnostic. The reference client speaks the OpenAI-compatible
+chat-completions and embeddings API over the routes `/v1/chat/completions` and
+`/v1/embeddings`. Any local or remote server that exposes that API works, and the
+implementation is not tied to one provider. It has been validated against a
+locally hosted server running a small chat model and an embedding model.
 
 Configure the endpoint with flags or environment variables:
 
@@ -98,6 +99,7 @@ Configure the endpoint with flags or environment variables:
 | API key          | `--api-key`           | `COGWRIGHT_API_KEY`          | none                        |
 | Chat model       | `--llm-model`         | `COGWRIGHT_LLM_MODEL`        | `local-chat-model`          |
 | Embedding model  | `--embedding-model`   | `COGWRIGHT_EMBEDDING_MODEL`  | `local-embedding-model`     |
+| Vision model     | `--vision-model`      | `COGWRIGHT_VISION_MODEL`     | `local-vision-model`        |
 | Index path       | `--index`             | `COGWRIGHT_INDEX`            | `.cogwright/index.json`     |
 
 The model names are placeholders; set them to whatever your endpoint serves. If
@@ -143,20 +145,35 @@ not contain the answer, Cogwright says so instead of inventing a procedure.
 To see which passages retrieval surfaced and how they ranked, add
 `--show-retrieved` to `ask`.
 
-## Evaluating retrieval quality
+To recognize scanned pages or transcribe diagram callouts during ingest, add the
+flags (the first needs the `ocr` extra, the second a multimodal model):
+
+```sh
+uv run cogwright ingest ./manuals --base-url <endpoint> \
+  --embedding-model <embed-model> --ocr --diagrams --vision-model <vision-model>
+```
+
+## Evaluating and calibrating retrieval
 
 Retrieval quality can be measured against a graded dataset without calling the
-model. A dataset pairs each question with the source pages it should surface, the
-identifiers it should resolve, and whether it is answerable at all.
+chat model. A dataset pairs each question with the source pages it should
+surface, the identifiers it should resolve, and whether it is answerable at all.
 
 ```sh
 uv run cogwright eval tests/fixtures/sample_manual/eval.json \
-  --base-url http://localhost:8000/v1 --embedding-model your-embedding-model
+  --base-url <endpoint> --embedding-model <embed-model>
 ```
 
 It reports found accuracy, page hit rate, code-resolution accuracy, and
 not-found accuracy, each with its counts, so a change in chunking or retrieval
 shows up as a number.
+
+This is also how you calibrate the one model-dependent setting: `--min-score`,
+the cosine cutoff below which a passage is treated as not relevant. Different
+embedding models place related and unrelated text at different similarity ranges,
+so there is no universal cutoff. Start from the default and raise `--min-score`
+until the unanswerable cases in your dataset report not-found while the real ones
+still resolve. Pass the chosen value to both `eval` and `ask`.
 
 ## Design
 
@@ -184,11 +201,10 @@ protocols, never on a concrete model, vector store, or web framework:
   and `DiagramAnalyzer` for figure callouts.
 
 The adapter layer supplies real implementations (disk access, text and PDF
-parsers, the HTTP model client, an in-memory vector store, and a reference OCR
-engine), and the test suite supplies deterministic fakes. This keeps the core
-fully unit-testable with no live model. A `DiagramAnalyzer` is supplied to the
-PDF parser programmatically; the seam is in place and any vision-backed
-implementation plugs in without other changes.
+parsers, the HTTP model client, an in-memory vector store, a reference OCR
+engine, and a reference vision-backed diagram analyzer), and the test suite
+supplies deterministic fakes. This keeps the core fully unit-testable with no
+live model, while every adapter can be swapped without the core changing.
 
 ### Structure-aware ingestion
 
@@ -217,11 +233,18 @@ Retrieval merges two signals: semantic top-k from the embedding store, and exact
 identifier lookup from the code index. Exact matches are precise, so they rank
 above purely semantic hits, and a passage that wins on both is ranked highest.
 
+"Nothing relevant" is decided by a cosine cutoff that is model-dependent and so
+is exposed as a calibratable setting rather than hardcoded; see
+[calibrating retrieval](#evaluating-and-calibrating-retrieval).
+
 The prompt instructs the model to answer only from the retrieved passages, to
 give numbered steps for procedures, to surface the relevant identifiers, to cite
 each passage it uses, and to say plainly when the answer is not present. If
 retrieval finds nothing relevant, the model is never called and a clean
-not-found result is returned, so there is no hallucinated procedure.
+not-found result is returned, so there is no hallucinated procedure. Answer
+assembly is tolerant of how real models format output: it recovers citations
+whether they are bracketed, comma-separated, or inline, and recognizes the
+not-found reply even when a smaller model wraps or repeats it.
 
 ## Testing
 
@@ -251,15 +274,17 @@ including in the PDF path, to keep the dependency tree MIT-compatible.
 
 Landed since the first milestone:
 
-- Scanned-page optical recognition behind the parser seam, available through the
-  optional `ocr` extra.
-- A retrieval evaluation harness and `eval` command.
+- Scanned-page optical recognition behind the parser seam, with a reference
+  engine available through the optional `ocr` extra.
+- Diagram and callout transcription through a vision-backed `DiagramAnalyzer`.
+- A retrieval evaluation harness, an `eval` command, and a calibratable
+  relevance threshold validated against a live model.
 
 Still ahead. The seams needed for these are already in place.
 
 - Layout-aware recognition and quality tuning for low-quality scans.
-- A vision-backed `DiagramAnalyzer` for exploded diagrams and callouts; the
-  parser seam and caption handling are already in place.
+- Region-level diagram understanding (cropping individual callouts) rather than
+  whole-page transcription.
 - Video ingestion.
 - Live-telemetry and equipment-monitoring integration.
 - Role-based access and multi-tenant accounts.
@@ -271,8 +296,14 @@ Still ahead. The seams needed for these are already in place.
 Where the design left a choice open, the following defaults were taken and can be
 revisited:
 
-- The model and embedding backends are reached through one HTTP endpoint that
-  follows the common chat-completions and embeddings JSON shape.
-- PDF parsing targets born-digital files with a recoverable text layer.
+- The model, embedding, and vision backends are reached through one
+  OpenAI-compatible HTTP endpoint.
+- The relevance cutoff defaults to a value suited to typical normalized
+  embedding models and is meant to be calibrated per model with `eval` and
+  `--min-score`.
+- PDF parsing targets born-digital files with a recoverable text layer; scanned
+  pages route to OCR when an image dominates a page with little text.
 - Heading detection in plain text treats all-caps lines and Markdown headings as
   section titles, which matches how equipment manuals are commonly laid out.
+- A permissively licensed PDF toolkit was chosen over copyleft alternatives to
+  keep the dependency tree MIT-compatible.
