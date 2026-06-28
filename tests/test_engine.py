@@ -7,10 +7,8 @@ from __future__ import annotations
 from cogwright.core.config import Config
 from cogwright.core.engine import IngestionPipeline, QueryEngine
 from cogwright.core.index import Index
-from cogwright.core.models import BlockKind
+from cogwright.core.models import BlockKind, Document
 from cogwright.core.prompt import NOT_FOUND_MESSAGE
-
-from cogwright.core.models import Document
 
 from .builders import block, document
 from .fakes import FakeDocumentParser, FakeEmbedder, FakeFileSystem, FakeLLMClient

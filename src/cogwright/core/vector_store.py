@@ -11,7 +11,7 @@ changing any retrieval code.
 from __future__ import annotations
 
 import math
-from typing import Mapping
+from collections.abc import Mapping
 
 from .models import Vector
 
@@ -28,7 +28,7 @@ def cosine_similarity(a: Vector, b: Vector) -> float:
     dot = 0.0
     norm_a = 0.0
     norm_b = 0.0
-    for x, y in zip(a, b):
+    for x, y in zip(a, b, strict=True):
         dot += x * y
         norm_a += x * x
         norm_b += y * y

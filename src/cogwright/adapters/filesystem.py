@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import os
-from typing import Sequence
+from collections.abc import Sequence
 
 
 class RealFileSystem:
@@ -16,7 +16,7 @@ class RealFileSystem:
             return handle.read()
 
     def read_text(self, path: str) -> str:
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             return handle.read()
 
     def write_text(self, path: str, data: str) -> None:

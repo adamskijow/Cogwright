@@ -43,6 +43,7 @@ dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",
     "mypy>=1.11",
+    "ruff>=0.6",
     # Dev-only: generates a born-digital PDF fixture so the PDF parser is tested
     # against real PDF bytes. Permissively licensed (BSD) and never shipped.
     "reportlab>=4.0",
@@ -73,3 +74,12 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --cov=cogwright --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# pyflakes, pycodestyle errors and warnings, import sorting, modernizations,
+# and common-bug checks. Deliberately a focused set, not everything.
+select = ["E", "F", "W", "I", "UP", "B"]

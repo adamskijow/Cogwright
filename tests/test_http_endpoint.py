@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Iterator
 
 import pytest
 
@@ -67,7 +67,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         for piece in _STREAM_PIECES:
             chunk = {"choices": [{"delta": {"content": piece}}]}
-            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode("utf-8"))
+            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
         self.wfile.write(b"data: [DONE]\n\n")
         self.wfile.flush()
 

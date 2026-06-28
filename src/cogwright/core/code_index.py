@@ -13,7 +13,7 @@ config, so the identifier schemes a deployment cares about are data, not code.
 from __future__ import annotations
 
 import re
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from .config import CodePattern
 from .models import Chunk, CodeRef
@@ -101,7 +101,7 @@ class CodeIndex:
         return frozenset(self._by_value)
 
     @classmethod
-    def from_chunks(cls, chunks: Iterable[Chunk]) -> "CodeIndex":
+    def from_chunks(cls, chunks: Iterable[Chunk]) -> CodeIndex:
         index = cls()
         for chunk in chunks:
             index.add_chunk(chunk)

@@ -12,10 +12,10 @@ from .chunking import chunk_document, embedding_text
 from .citation import CitationMapper
 from .code_index import CodeIndex, CodeIndexer
 from .config import (
+    DEFAULT_CODE_PATTERNS,
     ChunkingConfig,
     CodePattern,
     Config,
-    DEFAULT_CODE_PATTERNS,
     EndpointConfig,
     RetrievalConfig,
 )
@@ -64,6 +64,7 @@ __all__ = [
     "CodeIndex",
     "CodeIndexer",
     "CodePattern",
+    "CodeRef",
     "CogwrightError",
     "Config",
     "DEFAULT_CODE_PATTERNS",

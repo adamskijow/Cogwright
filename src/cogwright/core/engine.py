@@ -10,8 +10,8 @@ exercised in tests with fakes and never needs a live endpoint.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from .chunking import chunk_document, embedding_text
 from .citation import CitationMapper
@@ -83,7 +83,7 @@ class IngestionPipeline:
         store = InMemoryVectorStore()
         if chunks:
             vectors = self._embedder.embed([embedding_text(c) for c in chunks])
-            for chunk, vector in zip(chunks, vectors):
+            for chunk, vector in zip(chunks, vectors, strict=True):
                 store.add(chunk.chunk_id, vector)
         return Index.build(list(chunks), store)
 

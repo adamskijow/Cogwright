@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from cogwright.core.index import Index
 from cogwright.core.models import (
     BlockKind,
     Chunk,
@@ -13,7 +14,6 @@ from cogwright.core.models import (
     Vector,
 )
 from cogwright.core.vector_store import InMemoryVectorStore
-from cogwright.core.index import Index
 
 
 def block(

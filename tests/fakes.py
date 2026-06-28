@@ -12,7 +12,7 @@ without any network call.
 from __future__ import annotations
 
 import re
-from typing import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 
 from cogwright.core.models import Document, Message, Vector
 

@@ -17,7 +17,8 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Any, Iterator, Sequence
+from collections.abc import Iterator, Sequence
+from typing import Any
 
 from ..core.errors import ModelUnavailableError
 from ..core.models import Message, Vector

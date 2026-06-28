@@ -9,16 +9,16 @@ persisted and reopened on another without carrying any model or vendor state.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Mapping
+from enum import StrEnum
 
 # A vector is a plain list of floats. The core never assumes a specific
 # embedding dimension or backend; it only does arithmetic over these.
 Vector = list[float]
 
 
-class BlockKind(str, Enum):
+class BlockKind(StrEnum):
     """The structural role a block of text plays in a source document."""
 
     HEADING = "heading"

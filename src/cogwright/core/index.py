@@ -31,7 +31,7 @@ class Index:
     code_index: CodeIndex
 
     @classmethod
-    def build(cls, chunks: list[Chunk], store: VectorStore) -> "Index":
+    def build(cls, chunks: list[Chunk], store: VectorStore) -> Index:
         chunk_map = {chunk.chunk_id: chunk for chunk in chunks}
         return cls(
             chunks=chunk_map,
@@ -47,7 +47,7 @@ class Index:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Index":
+    def from_dict(cls, data: dict[str, Any]) -> Index:
         version = data.get("version")
         if version != SCHEMA_VERSION:
             raise ValueError(

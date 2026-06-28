@@ -149,7 +149,7 @@ def _dominant_kind(blocks: list[TextBlock]) -> BlockKind:
 
 def _make_id(document_id: str, ordinal: int, page: int, text: str) -> str:
     digest = hashlib.sha1(
-        f"{document_id}|{ordinal}|{page}|{text}".encode("utf-8")
+        f"{document_id}|{ordinal}|{page}|{text}".encode()
     ).hexdigest()
     return digest[:16]
 

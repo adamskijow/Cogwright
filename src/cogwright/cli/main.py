@@ -15,8 +15,12 @@ import dataclasses
 import json
 import os
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
+from ..adapters.filesystem import RealFileSystem
+from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
+from ..adapters.pdf_parser import PdfDocumentParser
+from ..adapters.text_parser import TextDocumentParser
 from ..core.config import Config, EndpointConfig, RetrievalConfig
 from ..core.engine import IngestionPipeline, QueryEngine
 from ..core.errors import CogwrightError, ModelUnavailableError
@@ -25,10 +29,6 @@ from ..core.models import Answer, ScoredChunk
 from ..core.prompt import NOT_FOUND_MESSAGE
 from ..core.protocols import DocumentParser
 from ..eval import evaluate, parse_dataset
-from ..adapters.filesystem import RealFileSystem
-from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
-from ..adapters.pdf_parser import PdfDocumentParser
-from ..adapters.text_parser import TextDocumentParser
 
 
 def main(argv: Sequence[str] | None = None) -> int:

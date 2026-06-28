@@ -10,7 +10,8 @@ implementations and the test suite supplies fakes.
 
 from __future__ import annotations
 
-from typing import Iterator, Mapping, Protocol, Sequence, runtime_checkable
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Protocol, runtime_checkable
 
 from .models import Document, Message, Vector
 

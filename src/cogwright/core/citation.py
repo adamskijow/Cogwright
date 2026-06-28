@@ -12,7 +12,7 @@ so an answer is never left without provenance.
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from collections.abc import Sequence
 
 from .models import Chunk, Citation, ScoredChunk
 

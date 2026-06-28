@@ -12,7 +12,7 @@ is deterministic and fully testable on its output shape.
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from .models import BlockKind, Message, ScoredChunk
 
