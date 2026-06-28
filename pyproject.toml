@@ -43,6 +43,9 @@ dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",
     "mypy>=1.11",
+    # Dev-only: generates a born-digital PDF fixture so the PDF parser is tested
+    # against real PDF bytes. Permissively licensed (BSD) and never shipped.
+    "reportlab>=4.0",
 ]
 
 [build-system]
@@ -60,10 +63,11 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 files = ["src", "tests"]
 
-# pdfplumber ships without type information; the adapter that uses it is the
-# only place we tolerate untyped imports, isolated here.
+# pdfplumber ships without type information, and reportlab (dev-only, used to
+# generate a PDF test fixture) likewise. These are the only places untyped
+# imports are tolerated, isolated here.
 [[tool.mypy.overrides]]
-module = ["pdfplumber", "pdfplumber.*"]
+module = ["pdfplumber", "pdfplumber.*", "reportlab", "reportlab.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

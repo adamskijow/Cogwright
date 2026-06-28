@@ -57,6 +57,24 @@ def test_procedure_steps_are_kept_together() -> None:
     assert step_chunks[0].section == "STARTUP PROCEDURE"
 
 
+def test_oversized_step_run_splits_at_step_boundaries() -> None:
+    steps = [
+        block(BlockKind.STEP, f"{n}. " + ("x" * 40), page=2) for n in range(1, 7)
+    ]
+    doc = document("doc", block(BlockKind.HEADING, "LONG PROCEDURE", page=2), *steps)
+
+    # Budget fits about two ~43-char steps per chunk, so the run divides.
+    chunks = chunk_document(doc, ChunkingConfig(step_max_chars=90), INDEXER)
+
+    step_chunks = [c for c in chunks if c.kind == BlockKind.STEP]
+    assert len(step_chunks) > 1
+    # No step is ever split: every original step line lands intact in some chunk.
+    joined = "\n".join(c.text for c in step_chunks)
+    for n in range(1, 7):
+        assert f"{n}. " in joined
+    assert all(c.section == "LONG PROCEDURE" for c in step_chunks)
+
+
 def test_paragraphs_pack_up_to_the_size_budget() -> None:
     doc = document(
         "doc",

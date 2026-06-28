@@ -64,7 +64,10 @@ def chunk_document(
             while i < len(blocks) and blocks[i].kind == BlockKind.STEP:
                 run.append(blocks[i])
                 i += 1
-            _emit(chunks, document, run, current_section, indexer)
+            # Keep the procedure together, but divide an oversized run at step
+            # boundaries so no single step is ever split.
+            for group in _pack_blocks(run, config.step_max_chars):
+                _emit(chunks, document, group, current_section, indexer)
             continue
 
         # Paragraphs and captions pack greedily up to the size budget.
@@ -111,6 +114,29 @@ def _emit(
             rows=rows,
         )
     )
+
+
+def _pack_blocks(blocks: list[TextBlock], max_chars: int) -> list[list[TextBlock]]:
+    """Greedily group whole blocks into runs that stay within a size budget.
+
+    A block is never split; if a single block already exceeds the budget it
+    becomes its own group.
+    """
+
+    groups: list[list[TextBlock]] = []
+    current: list[TextBlock] = []
+    length = 0
+    for block in blocks:
+        block_len = len(block.text)
+        if current and length + block_len > max_chars:
+            groups.append(current)
+            current = []
+            length = 0
+        current.append(block)
+        length += block_len
+    if current:
+        groups.append(current)
+    return groups
 
 
 def _dominant_kind(blocks: list[TextBlock]) -> BlockKind:

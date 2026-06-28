@@ -52,6 +52,16 @@ DEFAULT_CODE_PATTERNS: tuple[CodePattern, ...] = (
         regex=r"(?:ERROR|ERR|E)[\s\-:_]*(?P<id>\d{2,4})",
     ),
     CodePattern(
+        name="dtc",
+        canonical_prefix="DTC",
+        regex=r"DTC[\s\-:_]*(?P<id>[A-Z]?\d{2,5})",
+    ),
+    CodePattern(
+        name="warning",
+        canonical_prefix="W",
+        regex=r"(?:WARNING|WARN|W)[\s\-:_]*(?P<id>\d{2,4})",
+    ),
+    CodePattern(
         name="part",
         canonical_prefix="PN",
         regex=(
@@ -69,6 +79,12 @@ class ChunkingConfig:
     max_chars: int = 1200
     keep_tables_intact: bool = True
     keep_steps_intact: bool = True
+    # A run of procedure steps is kept together up to this budget. A single step
+    # is never split; an oversized run is divided at step boundaries so one very
+    # long procedure does not become a single unwieldy chunk. This budget is
+    # larger than max_chars because keeping a whole procedure together is worth
+    # more than keeping it uniform with paragraph chunks.
+    step_max_chars: int = 2400
 
 
 @dataclass(frozen=True)

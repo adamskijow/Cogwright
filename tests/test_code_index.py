@@ -31,6 +31,10 @@ def indexer() -> CodeIndexer:
         ("Order part PN 44-19A for the belt.", "PN-44-19A"),
         ("Replace P/N 44-19A as needed.", "PN-44-19A"),
         ("Part Number 7788-01 is the seal kit.", "PN-7788-01"),
+        ("Diagnostic DTC P0420 was logged.", "DTC-P0420"),
+        ("See DTC-1234 in the log.", "DTC-1234"),
+        ("Warning 18 means the filter is dirty.", "W-18"),
+        ("Clear W-18 after service.", "W-18"),
     ],
 )
 def test_detects_and_normalizes(

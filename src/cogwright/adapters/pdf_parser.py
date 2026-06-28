@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import io
 import os
+from typing import Any
 
 from ..core.errors import CogwrightError
 from ..core.models import BlockKind, Document, TextBlock
@@ -43,15 +44,10 @@ class PdfDocumentParser:
 
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             for page_number, page in enumerate(pdf.pages, start=1):
-                text = page.extract_text() or ""
-                for block in parse_lines(text, page_number):
+                for block in self._page_blocks(page, page_number):
                     if title is None and block.kind == BlockKind.HEADING:
                         title = block.text
                     blocks.append(block)
-                for table in page.extract_tables():
-                    table_block = _table_block(table, page_number)
-                    if table_block is not None:
-                        blocks.append(table_block)
 
         return Document(
             document_id=stem,
@@ -59,6 +55,37 @@ class PdfDocumentParser:
             title=title or stem,
             blocks=tuple(blocks),
         )
+
+    def _page_blocks(self, page: Any, page_number: int) -> list[TextBlock]:
+        tables = page.find_tables()
+        bboxes = [table.bbox for table in tables]
+
+        # Extract the running text from the part of the page that is not inside a
+        # table, so table cells are not also chunked as paragraphs. Without this,
+        # the same table content would be indexed twice.
+        if bboxes:
+            text_page = page.filter(lambda obj: not _inside_any(obj, bboxes))
+            text = text_page.extract_text() or ""
+        else:
+            text = page.extract_text() or ""
+
+        blocks = parse_lines(text, page_number)
+        for table in tables:
+            table_block = _table_block(table.extract(), page_number)
+            if table_block is not None:
+                blocks.append(table_block)
+        return blocks
+
+
+def _inside_any(obj: Any, bboxes: list[Any]) -> bool:
+    """Whether a page object's center falls within any table bounding box."""
+
+    x = (obj["x0"] + obj["x1"]) / 2
+    y = (obj["top"] + obj["bottom"]) / 2
+    for x0, top, x1, bottom in bboxes:
+        if x0 <= x <= x1 and top <= y <= bottom:
+            return True
+    return False
 
 
 def _table_block(table: object, page: int) -> TextBlock | None:
