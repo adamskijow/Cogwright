@@ -114,6 +114,8 @@ class EndpointConfig:
     api_key: str | None = None
     llm_model: str = "local-chat-model"
     embedding_model: str = "local-embedding-model"
+    # Used only when diagram analysis is enabled; must be a multimodal model.
+    vision_model: str = "local-vision-model"
     timeout_seconds: float = 60.0
 
 

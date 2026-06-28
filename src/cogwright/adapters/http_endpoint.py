@@ -24,8 +24,13 @@ from ..core.errors import ModelUnavailableError
 from ..core.models import Message, Vector
 
 
-class _Endpoint:
-    """Shared HTTP plumbing for the LLM and embedder clients."""
+class HttpEndpoint:
+    """Shared HTTP plumbing for the chat, embedding, and vision clients.
+
+    Handles URL joining, auth headers, JSON and server-sent-events requests, and
+    a reachability probe, so each client only has to build its payload and read
+    its response.
+    """
 
     def __init__(self, base_url: str, api_key: str | None, timeout: float) -> None:
         self._base = base_url.rstrip("/")
@@ -101,7 +106,7 @@ class HttpLLMClient:
         api_key: str | None = None,
         timeout: float = 60.0,
     ) -> None:
-        self._endpoint = _Endpoint(base_url, api_key, timeout)
+        self._endpoint = HttpEndpoint(base_url, api_key, timeout)
         self._model = model
 
     def complete(self, messages: Sequence[Message]) -> str:
@@ -146,7 +151,7 @@ class HttpEmbedder:
         api_key: str | None = None,
         timeout: float = 60.0,
     ) -> None:
-        self._endpoint = _Endpoint(base_url, api_key, timeout)
+        self._endpoint = HttpEndpoint(base_url, api_key, timeout)
         self._model = model
 
     def embed(self, texts: Sequence[str]) -> list[Vector]:

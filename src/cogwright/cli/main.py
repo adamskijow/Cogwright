@@ -22,6 +22,7 @@ from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
 from ..adapters.ocr import PytesseractOcrEngine
 from ..adapters.pdf_parser import PdfDocumentParser
 from ..adapters.text_parser import TextDocumentParser
+from ..adapters.vision import VisionDiagramAnalyzer
 from ..core.citation import strip_citation_markers
 from ..core.config import Config, EndpointConfig, RetrievalConfig
 from ..core.engine import IngestionPipeline, QueryEngine
@@ -83,6 +84,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--ocr",
         action="store_true",
         help="recognize scanned PDF pages that have no text layer (needs the ocr extra)",
+    )
+    ingest.add_argument(
+        "--diagrams",
+        action="store_true",
+        help="transcribe diagram callouts in PDFs with a multimodal vision model",
+    )
+    ingest.add_argument(
+        "--vision-model",
+        default=os.environ.get("COGWRIGHT_VISION_MODEL"),
+        help="multimodal model name for diagram analysis",
     )
 
     ask = subparsers.add_parser(
@@ -150,6 +161,7 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         api_key=args.api_key,
         llm_model=getattr(args, "llm_model", None) or defaults.llm_model,
         embedding_model=args.embedding_model or defaults.embedding_model,
+        vision_model=getattr(args, "vision_model", None) or defaults.vision_model,
     )
     retrieval = RetrievalConfig()
     top_k = getattr(args, "top_k", None)
@@ -182,9 +194,19 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     config = _config_from_args(args)
     fs = RealFileSystem()
     ocr_engine = PytesseractOcrEngine() if args.ocr else None
+    diagram_analyzer = (
+        VisionDiagramAnalyzer(
+            base_url=config.endpoint.base_url,
+            model=config.endpoint.vision_model,
+            api_key=config.endpoint.api_key,
+            timeout=config.endpoint.timeout_seconds,
+        )
+        if args.diagrams
+        else None
+    )
     parsers: list[DocumentParser] = [
         TextDocumentParser(),
-        PdfDocumentParser(ocr_engine=ocr_engine),
+        PdfDocumentParser(ocr_engine=ocr_engine, diagram_analyzer=diagram_analyzer),
     ]
     embedder = _make_embedder(config)
 
