@@ -16,8 +16,23 @@ from collections.abc import Sequence
 
 from .models import Chunk, Citation, ScoredChunk
 
-# Matches the bracketed ids the prompt instructs the model to emit, e.g. [1a2b3c4d].
-_CITATION_PATTERN = re.compile(r"\[([0-9a-f]{6,32})\]")
+# Chunk ids are bare hexadecimal tokens. Scanning for them directly, rather than
+# requiring one exact bracket format, tolerates the varied ways a real model
+# cites: [id], [id1, id2], (see id), or inline. False matches are ruled out by
+# checking each token against the known chunk ids.
+_ID_TOKEN = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{6,32}(?![0-9a-fA-F])")
+
+# A bracketed run of one or more ids, removed when cleaning an answer for display.
+_CITATION_GROUP = re.compile(r"\s*\[[0-9a-f][0-9a-f,;\s]*\]")
+
+
+def strip_citation_markers(text: str) -> str:
+    """Remove bracketed citation groups for clean display, leaving prose intact."""
+
+    cleaned = _CITATION_GROUP.sub("", text)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r" +\n", "\n", cleaned)
+    return cleaned.strip()
 
 
 class CitationMapper:
@@ -42,8 +57,8 @@ class CitationMapper:
 
         result: list[str] = []
         seen: set[str] = set()
-        for match in _CITATION_PATTERN.finditer(answer_text):
-            chunk_id = match.group(1)
+        for match in _ID_TOKEN.finditer(answer_text):
+            chunk_id = match.group(0)
             if chunk_id in self._chunks and chunk_id not in seen:
                 seen.add(chunk_id)
                 result.append(chunk_id)

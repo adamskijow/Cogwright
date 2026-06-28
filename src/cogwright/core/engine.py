@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .chunking import chunk_document, embedding_text
-from .citation import CitationMapper
+from .citation import CitationMapper, strip_citation_markers
 from .code_index import CodeIndexer
 from .config import Config
 from .errors import UnsupportedDocumentError
@@ -161,7 +161,7 @@ class QueryEngine:
         """Turn raw model output into a structured, cited answer."""
 
         normalized = answer_text.strip()
-        if not prep.found or normalized == NOT_FOUND_MESSAGE:
+        if not prep.found or _is_not_found(normalized):
             return not_found_answer()
 
         chunk_map = {sc.chunk.chunk_id: sc.chunk for sc in prep.retrieved}
@@ -190,6 +190,23 @@ def not_found_answer() -> Answer:
     """The clean, grounded-failure result used on every not-found path."""
 
     return Answer(text=NOT_FOUND_MESSAGE, found=False)
+
+
+def _is_not_found(answer_text: str) -> bool:
+    """Whether a model reply is really the not-found sentence.
+
+    Real models add stray whitespace, a trailing period, a citation, or a short
+    lead-in like "Unfortunately,". This recognizes those without firing on a
+    genuine answer that merely mentions the phrase in passing.
+    """
+
+    core = strip_citation_markers(answer_text).strip().lower().rstrip(".!").strip()
+    target = NOT_FOUND_MESSAGE.lower().rstrip(".").strip()
+    if not core:
+        return False
+    if core == target:
+        return True
+    return target in core and len(core) <= len(target) + 30
 
 
 def _referenced_codes(

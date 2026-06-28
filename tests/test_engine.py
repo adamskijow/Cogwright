@@ -84,6 +84,42 @@ def test_not_found_path_skips_the_model() -> None:
     assert llm.calls == []
 
 
+def test_assemble_tolerates_messy_real_model_output() -> None:
+    embedder = FakeEmbedder()
+    config = Config()
+    index = _build_index(embedder, config)
+    engine = QueryEngine(embedder, FakeLLMClient(), config)
+
+    prep = engine.prepare(index, "How do I clear alarm 204?")
+    assert prep.found
+    ids = [sc.chunk.chunk_id for sc in prep.retrieved][:2]
+    messy = (
+        f"Sure, happy to help! First cool the unit, then refill coolant "
+        f"[{ids[0]}, {ids[1]}]. Let me know if you need more."
+    )
+    answer = engine.assemble(prep, messy)
+
+    assert answer.found is True
+    assert {c.chunk_id for c in answer.citations} == set(ids)
+
+
+def test_assemble_recognizes_a_wrapped_not_found_reply() -> None:
+    embedder = FakeEmbedder()
+    config = Config()
+    index = _build_index(embedder, config)
+    engine = QueryEngine(embedder, FakeLLMClient(), config)
+    prep = engine.prepare(index, "How do I clear alarm 204?")
+
+    for reply in (
+        NOT_FOUND_MESSAGE,
+        f"  {NOT_FOUND_MESSAGE}\n",
+        f"Unfortunately, {NOT_FOUND_MESSAGE[0].lower() + NOT_FOUND_MESSAGE[1:]}",
+    ):
+        answer = engine.assemble(prep, reply)
+        assert answer.found is False
+        assert answer.citations == ()
+
+
 def test_index_survives_a_serialization_round_trip() -> None:
     embedder = FakeEmbedder()
     config = Config()

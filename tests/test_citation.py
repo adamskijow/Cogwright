@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from cogwright.core.citation import CitationMapper
+from cogwright.core.citation import CitationMapper, strip_citation_markers
 from cogwright.core.models import ScoredChunk
 
 from .builders import chunk
@@ -53,3 +53,16 @@ def test_map_answer_falls_back_to_retrieved_when_no_markers() -> None:
     ]
     citations = mapper.map_answer("An answer with no bracketed ids.", retrieved)
     assert [c.chunk_id for c in citations] == ["a1b2c3d4", "e5f6a7b8"]
+
+
+def test_extract_handles_multi_id_and_inline_citations() -> None:
+    mapper = _mapper()
+    cited = mapper.extract_cited_ids(
+        "See [a1b2c3d4, e5f6a7b8] and a1b2c3d4 again; ignore deadbeefdeadbeef."
+    )
+    assert cited == ["a1b2c3d4", "e5f6a7b8"]
+
+
+def test_strip_citation_markers_removes_brackets_and_tidies_spacing() -> None:
+    text = "Do step one [a1b2c3d4] then step two [a1b2c3d4, e5f6a7b8]."
+    assert strip_citation_markers(text) == "Do step one then step two."

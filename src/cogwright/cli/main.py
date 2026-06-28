@@ -22,6 +22,7 @@ from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
 from ..adapters.ocr import PytesseractOcrEngine
 from ..adapters.pdf_parser import PdfDocumentParser
 from ..adapters.text_parser import TextDocumentParser
+from ..core.citation import strip_citation_markers
 from ..core.config import Config, EndpointConfig, RetrievalConfig
 from ..core.engine import IngestionPipeline, QueryEngine
 from ..core.errors import CogwrightError, ModelUnavailableError
@@ -245,7 +246,9 @@ def _cmd_ask(args: argparse.Namespace) -> int:
 
     answer = engine.assemble(prep, answer_text)
     if args.no_stream:
-        print(answer.text)
+        # Streaming already printed the raw text live; for the buffered path show
+        # the answer with citation markers removed for readability.
+        print(strip_citation_markers(answer.text))
     _print_provenance(answer)
     return 0
 

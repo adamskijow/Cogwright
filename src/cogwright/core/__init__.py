@@ -9,7 +9,7 @@ framework. Concrete I/O lives in :mod:`cogwright.adapters`.
 from __future__ import annotations
 
 from .chunking import chunk_document, embedding_text
-from .citation import CitationMapper
+from .citation import CitationMapper, strip_citation_markers
 from .code_index import CodeIndex, CodeIndexer
 from .config import (
     DEFAULT_CODE_PATTERNS,
@@ -96,4 +96,5 @@ __all__ = [
     "embedding_text",
     "not_found_answer",
     "retrieve",
+    "strip_citation_markers",
 ]
