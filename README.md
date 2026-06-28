@@ -5,132 +5,31 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
 
 # Cogwright
 
-Cogwright is a local-first retrieval engine for technical equipment
-documentation. You point it at a corpus of manuals, service bulletins, and parts
-lists; a technician asks a question in plain language; and it returns a cited,
-step-by-step answer grounded only in those documents, including alarm and stop
-code lookup and references to the correct part.
+Cogwright answers questions about technical equipment documentation. Point it at
+a folder of manuals, service bulletins, and parts lists, ask in plain language,
+and get a step-by-step answer grounded only in those documents, with citations to
+the source page. A bare alarm code, stop code, or part number resolves to the
+exact passage that defines it.
 
-It is built for field troubleshooting of industrial and mechanical equipment,
-where the right answer is already written down somewhere across hundreds of pages
-and the job is to find it, ground the response in it, and show the source.
-
-## What it is, and what it is not
-
-Cogwright **is** a knowledge-retrieval engine over a fixed set of documents:
-
-- Ingest hard industrial documents well.
-- Retrieve precisely, combining meaning-based search with exact identifier
-  lookup.
-- Answer with citations back to the source page, or say plainly when the answer
-  is not in the documents.
-
-Cogwright is **not**:
-
-- an equipment-monitoring or live-telemetry platform,
-- a multi-tenant or hosted service,
-- an authoring or publishing suite for manuals,
-- a general web search tool.
-
-The scope is deliberately one slice, done well.
-
-## Local-first and private by design
-
-- **Offline-capable.** Nothing is required beyond your documents and a model
-  endpoint you choose. There is no required cloud service.
-- **No telemetry.** The tool collects and transmits nothing about you or your
-  corpus.
-- **One network destination.** The only outbound calls are to the single
-  endpoint you configure for the model, embeddings, and vision. That endpoint can
-  run on the same machine, so a fully air-gapped deployment is possible.
-
-Your documents stay where you put them, and the index is a plain file on your
-disk.
-
-## Supported documents
-
-Out of the box, with no extra dependencies:
-
-- plain text (`.txt`, `.text`),
-- Markdown (`.md`, `.markdown`),
-- born-digital PDFs (`.pdf`), including tables, where the page has a real text
-  layer.
-
-Two richer paths sit behind the same parser seam and are enabled per ingest:
-
-- **Scanned and photographed PDF pages** (no text layer) are recognized through
-  an optical-recognition engine. Install the extra (`uv sync --extra ocr`) and a
-  scanned page's text is structured exactly like born-digital text.
-- **Diagram and exploded-parts callouts** are transcribed by a multimodal vision
-  model, so the labels and part numbers printed on a figure become retrievable.
-  This uses the same endpoint and no extra dependency.
-
-Both are newer than the born-digital path and their quality depends on the
-engine, the scan, and the model. Neither changes default behavior: without the
-extra or the flag, those pages are handled as before.
-
-## Installation
-
-Cogwright targets Python 3.12 and uses [uv](https://docs.astral.sh/uv/) for the
-environment and dependency management.
+It runs locally against a model endpoint you choose. Your documents and the index
+stay on your machine, and the only network calls go to that one endpoint.
 
 ```sh
 uv sync
-```
 
-This creates a virtual environment and installs the pinned dependencies from the
-lockfile. The single third-party runtime dependency is a permissively licensed
-PDF toolkit; everything else, including the model client, uses the standard
-library.
+uv run cogwright ingest ./manuals \
+  --base-url http://localhost:8000/v1 --embedding-model nomic-embed-text
 
-## Pointing it at a model endpoint
-
-Cogwright is model-agnostic. The reference client speaks the OpenAI-compatible
-chat-completions and embeddings API over the routes `/v1/chat/completions` and
-`/v1/embeddings`. Any local or remote server that exposes that API works, and the
-implementation is not tied to one provider. It has been validated against a
-locally hosted server running a small chat model and an embedding model.
-
-Configure the endpoint with flags or environment variables:
-
-| Setting          | Flag                  | Environment variable          | Default                     |
-| ---------------- | --------------------- | ----------------------------- | --------------------------- |
-| Base URL         | `--base-url`          | `COGWRIGHT_BASE_URL`          | `http://localhost:8000/v1`  |
-| API key          | `--api-key`           | `COGWRIGHT_API_KEY`          | none                        |
-| Chat model       | `--llm-model`         | `COGWRIGHT_LLM_MODEL`        | `local-chat-model`          |
-| Embedding model  | `--embedding-model`   | `COGWRIGHT_EMBEDDING_MODEL`  | `local-embedding-model`     |
-| Vision model     | `--vision-model`      | `COGWRIGHT_VISION_MODEL`     | `local-vision-model`        |
-| Index path       | `--index`             | `COGWRIGHT_INDEX`            | `.cogwright/index.json`     |
-
-The model names are placeholders; set them to whatever your endpoint serves. If
-the endpoint cannot be reached, Cogwright reports the problem and exits with a
-non-zero status rather than crashing.
-
-## Usage
-
-Build an index from a folder of documents:
-
-```sh
-uv run cogwright ingest ./manuals --base-url http://localhost:8000/v1 \
-  --embedding-model your-embedding-model
-```
-
-Ask a question:
-
-```sh
 uv run cogwright ask "How do I clear alarm 204?" \
   --base-url http://localhost:8000/v1 \
-  --llm-model your-chat-model
+  --llm-model llama3.2:1b --embedding-model nomic-embed-text --min-score 0.55
 ```
 
-The answer streams as it is generated, followed by any referenced identifiers
-and the source pages it was drawn from:
-
 ```
-Follow these steps:
+To clear alarm 204, follow these steps:
 1. Stop the unit and allow the gearbox to cool for ten minutes.
 2. Check the coolant level and refill to the cold mark if it is low.
-3. Clear alarm 204 from the panel and restart the unit. [<id>]
+3. Clear alarm 204 from the panel and restart the unit.
 
 Referenced identifiers: AL-204
 
@@ -138,172 +37,185 @@ Sources:
   - manuals/series7_conveyor_manual.txt (page 3, section: ALARM AND STOP CODE REFERENCE)
 ```
 
-A bare alarm code, stop code, fault, error, diagnostic trouble code, warning, or
-part number resolves to the exact passage that documents it. When the corpus does
-not contain the answer, Cogwright says so instead of inventing a procedure.
+When the corpus does not contain the answer, Cogwright says so instead of
+inventing one.
 
-To see which passages retrieval surfaced and how they ranked, add
-`--show-retrieved` to `ask`.
+## How it works
 
-To recognize scanned pages or transcribe diagram callouts during ingest, add the
-flags (the first needs the `ocr` extra, the second a multimodal model):
+**Ingest** parses each document into structure-aware chunks, where a table stays
+whole and a numbered procedure stays together, embeds them, and writes a single
+JSON index to disk. A dedicated pass indexes every alarm, stop, fault, error,
+diagnostic, warning, and part identifier as an exact lookup key.
+
+**Ask** embeds the question and retrieves by two signals at once: semantic
+similarity and exact identifier lookup, with exact matches ranked above fuzzy
+ones. Those passages, and only those, go to the model with instructions to answer
+from them, number any steps, surface the identifiers, and cite each passage. If
+nothing clears the relevance bar, the model is never called.
+
+```
+ingest:  documents -> parse -> chunk -> embed ------+
+                          \--> identifier index ----+--> index.json
+
+ask:     question -> embed + detect identifiers -> hybrid retrieval
+                  -> prompt (retrieved context only) -> model -> cited answer
+```
+
+## Install
+
+Cogwright targets Python 3.12 and uses [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv run cogwright ingest ./manuals --base-url <endpoint> \
-  --embedding-model <embed-model> --ocr --diagrams --vision-model <vision-model>
+uv sync                  # core install
+uv sync --extra ocr      # add scanned-page recognition
 ```
 
-## Evaluating and calibrating retrieval
+The only third-party runtime dependency is a PDF toolkit. The model client,
+vector math, and CLI are all standard library.
 
-Retrieval quality can be measured against a graded dataset without calling the
-chat model. A dataset pairs each question with the source pages it should
-surface, the identifiers it should resolve, and whether it is answerable at all.
+## Configure the endpoint
+
+Cogwright talks to any OpenAI-compatible endpoint, using the routes
+`/v1/chat/completions` and `/v1/embeddings`. That can be a model server on the
+same machine or a hosted API; the implementation is not tied to one provider, and
+it has been validated against a local server running a small chat model and an
+embedding model. Configure it with flags or environment variables:
+
+| Setting          | Flag                | Environment variable          | Default                    |
+| ---------------- | ------------------- | ----------------------------- | -------------------------- |
+| Base URL         | `--base-url`        | `COGWRIGHT_BASE_URL`         | `http://localhost:8000/v1` |
+| API key          | `--api-key`         | `COGWRIGHT_API_KEY`          | none                       |
+| Chat model       | `--llm-model`       | `COGWRIGHT_LLM_MODEL`        | `local-chat-model`         |
+| Embedding model  | `--embedding-model` | `COGWRIGHT_EMBEDDING_MODEL`  | `local-embedding-model`    |
+| Vision model     | `--vision-model`    | `COGWRIGHT_VISION_MODEL`     | `local-vision-model`       |
+| Index path       | `--index`           | `COGWRIGHT_INDEX`            | `.cogwright/index.json`    |
+
+The model names are placeholders; set them to whatever your endpoint serves. An
+unreachable endpoint is reported with a non-zero exit, never a crash.
+
+## Commands
+
+### ingest
 
 ```sh
-uv run cogwright eval tests/fixtures/sample_manual/eval.json \
-  --base-url <endpoint> --embedding-model <embed-model>
+cogwright ingest <paths...> [--ocr] [--diagrams]
 ```
 
-It reports found accuracy, page hit rate, code-resolution accuracy, and
-not-found accuracy, each with its counts, so a change in chunking or retrieval
-shows up as a number.
+Paths are files or folders. `--ocr` recognizes scanned PDF pages and needs the
+`ocr` extra. `--diagrams` transcribes figure callouts with a multimodal model set
+by `--vision-model`.
 
-This is also how you calibrate the one model-dependent setting: `--min-score`,
-the cosine cutoff below which a passage is treated as not relevant. Different
-embedding models place related and unrelated text at different similarity ranges,
-so there is no universal cutoff. Start from the default and raise `--min-score`
-until the unanswerable cases in your dataset report not-found while the real ones
-still resolve. Pass the chosen value to both `eval` and `ask`.
+### ask
 
-## Design
-
-Cogwright is split into a pure core and a thin layer that wires real input and
-output.
-
-```
-documents -> DocumentParser -> chunker -> Embedder ---> index (on disk)
-                                  |                       |
-                                  +--> code index --------+
-                                                          |
-question -> code detect + Embedder -> hybrid retrieval -> PromptBuilder -> LLMClient
-                                                          |
-                                                          +--> CitationMapper -> cited answer
+```sh
+cogwright ask "<question>" [--top-k N] [--min-score S] [--no-stream] [--show-retrieved]
 ```
 
-### Strict separation behind protocol seams
+The answer streams as it is generated. `--show-retrieved` prints the ranked
+passages and their scores first, which is how you see what retrieval is doing.
 
-The core library holds all retrieval and decision logic and depends only on
-protocols, never on a concrete model, vector store, or web framework:
+### eval
 
-- the five core seams `FileSystem`, `DocumentParser`, `Embedder`, `LLMClient`,
-  and `VectorStore`,
-- and two extension seams for richer ingestion: `OcrEngine` for scanned pages
-  and `DiagramAnalyzer` for figure callouts.
+```sh
+cogwright eval <dataset.json> [--min-score S]
+```
 
-The adapter layer supplies real implementations (disk access, text and PDF
-parsers, the HTTP model client, an in-memory vector store, a reference OCR
-engine, and a reference vision-backed diagram analyzer), and the test suite
-supplies deterministic fakes. This keeps the core fully unit-testable with no
-live model, while every adapter can be swapped without the core changing.
+Scores retrieval against a graded dataset without calling the chat model. See
+[calibrating relevance](#calibrating-relevance).
 
-### Structure-aware ingestion
+## Documents it understands
 
-A naive splitter destroys exactly the content a technician needs whole. The
-chunker respects document structure:
+- **Text and Markdown** (`.txt`, `.text`, `.md`, `.markdown`). Headings, numbered
+  steps, and pipe tables are recovered.
+- **Born-digital PDFs** with a real text layer, including tables, which are lifted
+  out as structured blocks. Real page numbers are kept for citations.
+- **Scanned PDF pages**, with the `ocr` extra. A page with little text and a
+  dominant image is rendered and recognized, then structured like any other page.
+- **Diagram callouts**, with `--diagrams`. A figure is sent to a vision model and
+  the printed labels and part numbers become searchable.
 
-- a table becomes a single chunk with its rows preserved,
-- a run of numbered procedure steps stays together and is never split,
-- headings open a new chunk and travel with the content beneath them as section
-  context.
+## Identifier lookup
 
-Chunk identifiers are derived from their content, so re-ingesting an unchanged
-document yields the same identifiers and citations stay stable across runs.
+A query that is a bare code resolves to the exact passage that documents it. The
+built-in patterns detect and normalize:
 
-### Code and part lookup as a first-class index
+| You type                          | Resolves to |
+| --------------------------------- | ----------- |
+| `alarm 204`, `AL-204`, `AL204`    | `AL-204`    |
+| `STOP CODE 12`, `SC-12`           | `SC-12`     |
+| `fault 09`                        | `F-09`      |
+| `error 30`                        | `E-30`      |
+| `DTC P0420`                       | `DTC-P0420` |
+| `warning 18`                      | `W-18`      |
+| `PN 44-19A`, `P/N 44-19A`         | `PN-44-19A` |
 
-A dedicated pass detects and indexes alarm codes, stop codes, fault and error
-identifiers, diagnostic trouble codes, warning codes, and part numbers as exact
-lookup keys. The rules are configurable patterns, not hardcoded schemes, so a
-bare query such as `AL-204`, `alarm 204`, or `SC-12` resolves to the precise
-passage that documents it.
+The patterns are configuration rather than hardcoded, so a deployment can add its
+own identifier schemes.
 
-### Hybrid retrieval and grounded answers
+## Calibrating relevance
 
-Retrieval merges two signals: semantic top-k from the embedding store, and exact
-identifier lookup from the code index. Exact matches are precise, so they rank
-above purely semantic hits, and a passage that wins on both is ranked highest.
+The not-found decision rests on one cosine cutoff, `--min-score`. It is
+embedding-model dependent: different models place related and unrelated text at
+different similarity ranges, so there is no universal value (the default, 0.45,
+suits typical normalized models). Calibrate it with `eval`. A dataset pairs each
+question with the pages it should surface, the identifiers it should resolve, and
+whether it is answerable at all:
 
-"Nothing relevant" is decided by a cosine cutoff that is model-dependent and so
-is exposed as a calibratable setting rather than hardcoded; see
-[calibrating retrieval](#evaluating-and-calibrating-retrieval).
+```json
+{ "question": "How do I clear alarm 204?", "expected_pages": [3],
+  "expected_codes": ["AL-204"], "should_find": true }
+```
 
-The prompt instructs the model to answer only from the retrieved passages, to
-give numbered steps for procedures, to surface the relevant identifiers, to cite
-each passage it uses, and to say plainly when the answer is not present. If
-retrieval finds nothing relevant, the model is never called and a clean
-not-found result is returned, so there is no hallucinated procedure. Answer
-assembly is tolerant of how real models format output: it recovers citations
-whether they are bracketed, comma-separated, or inline, and recognizes the
-not-found reply even when a smaller model wraps or repeats it.
+Raise `--min-score` until the unanswerable cases report not-found while the real
+ones still resolve, then pass that value to both `eval` and `ask`. The harness
+reports found accuracy, page hit rate, code-resolution accuracy, and not-found
+accuracy, each with its counts.
+
+## Architecture
+
+A pure core holds all retrieval and decision logic; a thin adapter and CLI layer
+does the real input and output. The core depends only on protocols, never on a
+concrete model, store, or framework:
+
+- core seams: `FileSystem`, `DocumentParser`, `Embedder`, `LLMClient`,
+  `VectorStore`
+- ingestion seams: `OcrEngine`, `DiagramAnalyzer`
+
+Adapters supply the real implementations (disk, text and PDF parsers, the HTTP
+client, an in-memory cosine store, an OCR engine, a vision analyzer); the tests
+supply fakes. To add a vector database, a different model API, or a new document
+type, implement the seam and the core does not change.
 
 ## Testing
 
-The core is fully unit-tested with fakes for every seam, and the suite includes
-an end-to-end run of ingest and ask against a small synthetic manual for an
-invented machine.
-
 ```sh
-uv run pytest          # run the test suite, including the end-to-end fixture run
-uv run mypy            # strict static type checking
-uv run ruff check .    # lint and import order
+uv run pytest          # tests, including end-to-end ingest and ask on a sample manual
+uv run mypy            # strict type checking
+uv run ruff check .    # lint
 ```
 
-No live model is used in the tests. The reference optical-recognition engine is
-covered by tests that run only when the `ocr` extra and the recognition binary
-are present, and are skipped otherwise. The same three checks run in continuous
-integration on every push and pull request.
+Every seam has a deterministic fake, so the suite needs no live model. Tests for
+the real OCR engine run only where it is installed and skip otherwise. All three
+checks run in CI on every push and pull request, alongside a guard that fails on a
+missing license header.
 
-## Licensing
+## Privacy
 
-Cogwright is released under the [MIT License](LICENSE), and every source file
-carries an SPDX header. All runtime dependencies are permissively licensed (MIT,
-BSD, Apache-2.0, and HPND). Copyleft-licensed toolkits are deliberately avoided,
-including in the PDF path, to keep the dependency tree MIT-compatible.
+No telemetry and no required cloud service. The only outbound traffic is to the
+endpoint you configure, which can run on the same machine, so a fully air-gapped
+deployment is possible. Documents stay where you put them, and the index is a
+plain file you control.
 
-## Roadmap
+## License
 
-Landed since the first milestone:
+MIT, with an SPDX header on every source file. Every dependency is permissively
+licensed; copyleft toolkits are avoided, including in the PDF path, to keep the
+tree MIT-compatible. See [CONTRIBUTING.md](CONTRIBUTING.md) to work on it.
 
-- Scanned-page optical recognition behind the parser seam, with a reference
-  engine available through the optional `ocr` extra.
-- Diagram and callout transcription through a vision-backed `DiagramAnalyzer`.
-- A retrieval evaluation harness, an `eval` command, and a calibratable
-  relevance threshold validated against a live model.
+## Status
 
-Still ahead. The seams needed for these are already in place.
-
-- Layout-aware recognition and quality tuning for low-quality scans.
-- Region-level diagram understanding (cropping individual callouts) rather than
-  whole-page transcription.
-- Video ingestion.
-- Live-telemetry and equipment-monitoring integration.
-- Role-based access and multi-tenant accounts.
-- A web interface.
-- Any marketplace or publishing pipeline for documents.
-
-## Configuration defaults and assumptions
-
-Where the design left a choice open, the following defaults were taken and can be
-revisited:
-
-- The model, embedding, and vision backends are reached through one
-  OpenAI-compatible HTTP endpoint.
-- The relevance cutoff defaults to a value suited to typical normalized
-  embedding models and is meant to be calibrated per model with `eval` and
-  `--min-score`.
-- PDF parsing targets born-digital files with a recoverable text layer; scanned
-  pages route to OCR when an image dominates a page with little text.
-- Heading detection in plain text treats all-caps lines and Markdown headings as
-  section titles, which matches how equipment manuals are commonly laid out.
-- A permissively licensed PDF toolkit was chosen over copyleft alternatives to
-  keep the dependency tree MIT-compatible.
+Text and born-digital PDF ingestion, hybrid retrieval, and grounded cited answers
+are complete and validated against a live local model. Scanned-page OCR, diagram
+transcription, and the evaluation harness have since landed. Region-level diagram
+cropping, tuning for low-quality scans, and more corpus formats are future work,
+and each fits an existing seam.
