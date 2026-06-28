@@ -103,7 +103,23 @@ cogwright ingest <paths...> [--ocr] [--diagrams]
 
 Paths are files or folders. `--ocr` recognizes scanned PDF pages and needs the
 `ocr` extra. `--diagrams` transcribes figure callouts with a multimodal model set
-by `--vision-model`.
+by `--vision-model`. `ingest` builds a fresh index, recording which documents it
+holds, when it was built, and the embedding model that produced the vectors.
+
+### update, remove, info
+
+Maintain an index without rebuilding it from scratch:
+
+```sh
+cogwright update <paths...>     # add new documents, refresh changed ones, skip unchanged
+cogwright remove <paths...>     # drop documents, matched by path or file name
+cogwright info                  # show the documents, counts, model, and timestamps
+```
+
+`update` compares a content hash per document, so re-running it only re-embeds
+what actually changed. Updating with a different embedding model than the index
+was built with is refused, and a query run with a mismatched model warns, because
+vectors from different models are not comparable.
 
 ### ask
 

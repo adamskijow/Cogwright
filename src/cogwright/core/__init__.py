@@ -21,6 +21,7 @@ from .config import (
 )
 from .engine import (
     IngestionPipeline,
+    IngestSummary,
     Preparation,
     QueryEngine,
     not_found_answer,
@@ -30,7 +31,7 @@ from .errors import (
     ModelUnavailableError,
     UnsupportedDocumentError,
 )
-from .index import Index
+from .index import DocumentRecord, Index, IndexMetadata
 from .models import (
     Answer,
     BlockKind,
@@ -73,12 +74,15 @@ __all__ = [
     "DEFAULT_CODE_PATTERNS",
     "DiagramAnalyzer",
     "Document",
+    "DocumentRecord",
     "DocumentParser",
     "Embedder",
     "EndpointConfig",
     "FileSystem",
     "InMemoryVectorStore",
     "Index",
+    "IndexMetadata",
+    "IngestSummary",
     "IngestionPipeline",
     "LLMClient",
     "Message",

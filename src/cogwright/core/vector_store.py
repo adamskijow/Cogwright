@@ -50,6 +50,9 @@ class InMemoryVectorStore:
     def add(self, chunk_id: str, vector: Vector) -> None:
         self._vectors[chunk_id] = list(vector)
 
+    def remove(self, chunk_id: str) -> None:
+        self._vectors.pop(chunk_id, None)
+
     def search(self, vector: Vector, k: int) -> list[tuple[str, float]]:
         scored = [
             (chunk_id, cosine_similarity(vector, stored))

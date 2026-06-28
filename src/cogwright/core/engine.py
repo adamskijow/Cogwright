@@ -10,16 +10,18 @@ exercised in tests with fakes and never needs a live endpoint.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import hashlib
+import os
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from .chunking import chunk_document, embedding_text
 from .citation import CitationMapper, strip_citation_markers
 from .code_index import CodeIndexer
 from .config import Config
-from .errors import UnsupportedDocumentError
-from .index import Index
-from .models import Answer, Chunk, CodeRef, Document, Message, ScoredChunk
+from .errors import CogwrightError, UnsupportedDocumentError
+from .index import DocumentRecord, Index, IndexMetadata
+from .models import Answer, Chunk, CodeRef, Document, Message, ScoredChunk, Vector
 from .prompt import NOT_FOUND_MESSAGE, STRUCTURED_SYSTEM_PROMPT, PromptBuilder
 from .protocols import DocumentParser, Embedder, FileSystem, LLMClient
 from .retrieval import retrieve
@@ -31,8 +33,20 @@ from .vector_store import InMemoryVectorStore
 _DEFAULT_EXTENSIONS: tuple[str, ...] = (".txt", ".md", ".text", ".pdf")
 
 
+@dataclass(frozen=True)
+class IngestSummary:
+    """What a build, update, or remove operation changed."""
+
+    added: tuple[str, ...] = ()
+    refreshed: tuple[str, ...] = ()
+    skipped: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+    total_documents: int = 0
+    total_chunks: int = 0
+
+
 class IngestionPipeline:
-    """Builds an index from a corpus of documents."""
+    """Builds and maintains an index over a corpus of documents."""
 
     def __init__(
         self,
@@ -67,10 +81,7 @@ class IngestionPipeline:
         return files
 
     def parse_file(self, path: str) -> Document:
-        parser = self._parser_for(path)
-        if parser is None:
-            raise UnsupportedDocumentError(path)
-        return parser.parse(path, self._fs.read_bytes(path))
+        return self._parse(path, self._fs.read_bytes(path))
 
     def chunk_documents(self, documents: Sequence[Document]) -> list[Chunk]:
         chunks: list[Chunk] = []
@@ -80,18 +91,128 @@ class IngestionPipeline:
             )
         return chunks
 
-    def build_index(self, chunks: Sequence[Chunk]) -> Index:
-        store = InMemoryVectorStore()
-        if chunks:
-            vectors = self._embedder.embed([embedding_text(c) for c in chunks])
-            for chunk, vector in zip(chunks, vectors, strict=True):
-                store.add(chunk.chunk_id, vector)
-        return Index.build(list(chunks), store)
+    def ingest(
+        self,
+        corpus_paths: Sequence[str],
+        *,
+        embedding_model: str = "",
+        timestamp: str = "",
+    ) -> Index:
+        """Build a fresh index over the corpus, stamping it with metadata."""
 
-    def ingest(self, corpus_paths: Sequence[str]) -> Index:
-        documents = [self.parse_file(path) for path in self.collect_files(corpus_paths)]
-        chunks = self.chunk_documents(documents)
-        return self.build_index(chunks)
+        index = Index.build(
+            [],
+            InMemoryVectorStore(),
+            IndexMetadata(
+                embedding_model=embedding_model,
+                created_at=timestamp,
+                updated_at=timestamp,
+            ),
+        )
+        index, _summary = self.update(
+            index, corpus_paths, embedding_model=embedding_model, timestamp=timestamp
+        )
+        return index
+
+    def update(
+        self,
+        index: Index,
+        corpus_paths: Sequence[str],
+        *,
+        embedding_model: str = "",
+        timestamp: str = "",
+    ) -> tuple[Index, IngestSummary]:
+        """Add new documents and refresh changed ones, leaving the rest untouched."""
+
+        self._require_matching_model(index, embedding_model)
+        records = {d.source_path: d for d in index.metadata.documents}
+        added: list[str] = []
+        refreshed: list[str] = []
+        skipped: list[str] = []
+
+        for path in self.collect_files(corpus_paths):
+            data = self._fs.read_bytes(path)
+            digest = _content_hash(data)
+            existing = records.get(path)
+            if existing is not None and existing.content_hash == digest:
+                skipped.append(path)
+                continue
+            if existing is not None:
+                index.remove_document(path)
+                refreshed.append(path)
+            else:
+                added.append(path)
+            document = self._parse(path, data)
+            chunks = chunk_document(document, self._config.chunking, self._indexer)
+            index.add_chunks(chunks, self._embed(chunks))
+            records[path] = DocumentRecord(
+                source_path=path,
+                document_id=document.document_id,
+                title=document.title,
+                content_hash=digest,
+                chunk_count=len(chunks),
+            )
+
+        index.metadata = _refreshed_metadata(
+            index, embedding_model, tuple(records.values()), timestamp
+        )
+        return index, IngestSummary(
+            added=tuple(added),
+            refreshed=tuple(refreshed),
+            skipped=tuple(skipped),
+            total_documents=len(records),
+            total_chunks=len(index.chunks),
+        )
+
+    def remove(
+        self,
+        index: Index,
+        targets: Sequence[str],
+        *,
+        timestamp: str = "",
+    ) -> tuple[Index, IngestSummary]:
+        """Drop documents from the index, matched by path or file name."""
+
+        records = {d.source_path: d for d in index.metadata.documents}
+        removed: list[str] = []
+        for target in targets:
+            for path in _resolve_targets(records.keys(), target):
+                index.remove_document(path)
+                del records[path]
+                removed.append(path)
+
+        index.metadata = _refreshed_metadata(
+            index,
+            index.metadata.embedding_model,
+            tuple(records.values()),
+            timestamp,
+            created_at=index.metadata.created_at,
+        )
+        return index, IngestSummary(
+            removed=tuple(removed),
+            total_documents=len(records),
+            total_chunks=len(index.chunks),
+        )
+
+    def _embed(self, chunks: Sequence[Chunk]) -> list[Vector]:
+        if not chunks:
+            return []
+        return self._embedder.embed([embedding_text(c) for c in chunks])
+
+    def _parse(self, path: str, data: bytes) -> Document:
+        parser = self._parser_for(path)
+        if parser is None:
+            raise UnsupportedDocumentError(path)
+        return parser.parse(path, data)
+
+    def _require_matching_model(self, index: Index, embedding_model: str) -> None:
+        existing = index.metadata.embedding_model
+        if existing and embedding_model and existing != embedding_model:
+            raise CogwrightError(
+                f"index was built with embedding model {existing!r}, but "
+                f"{embedding_model!r} was given. Rebuild the index, or pass the "
+                "model the index was built with."
+            )
 
     def _parser_for(self, path: str) -> DocumentParser | None:
         for parser in self._parsers:
@@ -238,6 +359,41 @@ def not_found_answer() -> Answer:
     """The clean, grounded-failure result used on every not-found path."""
 
     return Answer(text=NOT_FOUND_MESSAGE, found=False)
+
+
+def _content_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _refreshed_metadata(
+    index: Index,
+    embedding_model: str,
+    documents: tuple[DocumentRecord, ...],
+    updated_at: str,
+    created_at: str | None = None,
+) -> IndexMetadata:
+    base = index.metadata
+    return IndexMetadata(
+        embedding_model=embedding_model or base.embedding_model,
+        vector_dim=_dim_of(index),
+        created_at=created_at if created_at is not None else (base.created_at or updated_at),
+        updated_at=updated_at,
+        documents=documents,
+    )
+
+
+def _dim_of(index: Index) -> int | None:
+    for vector in index.store.vectors().values():
+        return len(vector)
+    return None
+
+
+def _resolve_targets(paths: Iterable[str], target: str) -> list[str]:
+    available = list(paths)
+    if target in available:
+        return [target]
+    base = os.path.basename(target)
+    return [p for p in available if os.path.basename(p) == base or p.endswith(target)]
 
 
 # How much extra text around the not-found sentence still counts as a not-found

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 The Cogwright Authors
-"""Command-line entry point: ``ingest`` and ``ask``.
+"""Command-line entry point: ``ingest``, ``update``, ``remove``, ``info``,
+``ask``, and ``eval``.
 
 This layer only wires real I/O (the disk, the parsers, the configured endpoint)
 to the pure engine and formats results. It keeps no logic of its own beyond
@@ -16,6 +17,7 @@ import json
 import os
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from ..adapters.filesystem import RealFileSystem
 from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
@@ -25,7 +27,7 @@ from ..adapters.text_parser import TextDocumentParser
 from ..adapters.vision import VisionDiagramAnalyzer
 from ..core.citation import clean_answer_text
 from ..core.config import Config, EndpointConfig, RetrievalConfig
-from ..core.engine import IngestionPipeline, QueryEngine
+from ..core.engine import IngestionPipeline, IngestSummary, QueryEngine
 from ..core.errors import CogwrightError, ModelUnavailableError
 from ..core.index import Index
 from ..core.models import Answer, ScoredChunk
@@ -43,6 +45,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "ingest":
             return _cmd_ingest(args)
+        if args.command == "update":
+            return _cmd_update(args)
+        if args.command == "remove":
+            return _cmd_remove(args)
+        if args.command == "info":
+            return _cmd_info(args)
         if args.command == "ask":
             return _cmd_ask(args)
         if args.command == "eval":
@@ -71,30 +79,24 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
 
     ingest = subparsers.add_parser(
-        "ingest", help="parse a corpus of documents and build a persisted index"
+        "ingest", help="parse a corpus of documents and build a fresh index"
     )
-    ingest.add_argument("paths", nargs="+", help="files or directories to ingest")
-    _add_common_args(ingest)
-    ingest.add_argument(
-        "--embedding-model",
-        default=os.environ.get("COGWRIGHT_EMBEDDING_MODEL"),
-        help="embedding model name served by the endpoint",
+    _add_ingest_args(ingest)
+
+    update = subparsers.add_parser(
+        "update",
+        help="add new documents to an existing index and refresh changed ones",
     )
-    ingest.add_argument(
-        "--ocr",
-        action="store_true",
-        help="recognize scanned PDF pages that have no text layer (needs the ocr extra)",
+    _add_ingest_args(update)
+
+    remove = subparsers.add_parser(
+        "remove", help="remove documents from an existing index"
     )
-    ingest.add_argument(
-        "--diagrams",
-        action="store_true",
-        help="transcribe diagram callouts in PDFs with a multimodal vision model",
-    )
-    ingest.add_argument(
-        "--vision-model",
-        default=os.environ.get("COGWRIGHT_VISION_MODEL"),
-        help="multimodal model name for diagram analysis",
-    )
+    remove.add_argument("paths", nargs="+", help="document paths or file names to drop")
+    _add_common_args(remove)
+
+    info = subparsers.add_parser("info", help="show what an index contains")
+    _add_common_args(info)
 
     ask = subparsers.add_parser(
         "ask", help="ask a question and get a grounded, cited answer"
@@ -154,6 +156,31 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _add_ingest_args(sub: argparse.ArgumentParser) -> None:
+    sub.add_argument("paths", nargs="+", help="files or directories to ingest")
+    _add_common_args(sub)
+    sub.add_argument(
+        "--embedding-model",
+        default=os.environ.get("COGWRIGHT_EMBEDDING_MODEL"),
+        help="embedding model name served by the endpoint",
+    )
+    sub.add_argument(
+        "--ocr",
+        action="store_true",
+        help="recognize scanned PDF pages that have no text layer (needs the ocr extra)",
+    )
+    sub.add_argument(
+        "--diagrams",
+        action="store_true",
+        help="transcribe diagram callouts in PDFs with a multimodal vision model",
+    )
+    sub.add_argument(
+        "--vision-model",
+        default=os.environ.get("COGWRIGHT_VISION_MODEL"),
+        help="multimodal model name for diagram analysis",
+    )
+
+
 def _add_common_args(sub: argparse.ArgumentParser) -> None:
     sub.add_argument(
         "--index",
@@ -178,7 +205,8 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         base_url=args.base_url or defaults.base_url,
         api_key=args.api_key,
         llm_model=getattr(args, "llm_model", None) or defaults.llm_model,
-        embedding_model=args.embedding_model or defaults.embedding_model,
+        embedding_model=getattr(args, "embedding_model", None)
+        or defaults.embedding_model,
         vision_model=getattr(args, "vision_model", None) or defaults.vision_model,
     )
     retrieval = RetrievalConfig()
@@ -211,9 +239,13 @@ def _make_llm(config: Config) -> HttpLLMClient:
     )
 
 
-def _cmd_ingest(args: argparse.Namespace) -> int:
-    config = _config_from_args(args)
-    fs = RealFileSystem()
+def _now() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _ingest_pipeline(
+    args: argparse.Namespace, config: Config, fs: RealFileSystem
+) -> IngestionPipeline:
     ocr_engine = PytesseractOcrEngine() if args.ocr else None
     diagram_analyzer = (
         VisionDiagramAnalyzer(
@@ -229,28 +261,136 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
         TextDocumentParser(),
         PdfDocumentParser(ocr_engine=ocr_engine, diagram_analyzer=diagram_analyzer),
     ]
-    embedder = _make_embedder(config)
+    return IngestionPipeline(fs, parsers, _make_embedder(config), config)
 
-    pipeline = IngestionPipeline(fs, parsers, embedder, config)
-    files = pipeline.collect_files(args.paths)
-    if not files:
+
+def _load_index(fs: RealFileSystem, path: str) -> Index | None:
+    if not fs.exists(path):
+        print(
+            f"error: no index found at {path}. Run 'cogwright ingest <paths>' first.",
+            file=sys.stderr,
+        )
+        return None
+    return Index.from_dict(json.loads(fs.read_text(path)))
+
+
+def _warn_model_mismatch(index: Index, embedding_model: str) -> None:
+    indexed = index.metadata.embedding_model
+    if indexed and embedding_model and indexed != embedding_model:
+        print(
+            f"warning: this index was built with embedding model {indexed!r}, but you "
+            f"are querying with {embedding_model!r}. Results may be wrong; rebuild the "
+            "index or pass the original model.",
+            file=sys.stderr,
+        )
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    config = _config_from_args(args)
+    fs = RealFileSystem()
+    pipeline = _ingest_pipeline(args, config, fs)
+    if not pipeline.collect_files(args.paths):
         print("error: no supported documents found in the given paths.", file=sys.stderr)
         return 1
 
-    print(f"Parsing {len(files)} document(s)...")
-    documents = [pipeline.parse_file(path) for path in files]
-    chunks = pipeline.chunk_documents(documents)
-    print(f"Built {len(chunks)} chunk(s); embedding against the endpoint...")
-    index = pipeline.build_index(chunks)
-
+    print("Parsing and embedding against the endpoint...")
+    index = pipeline.ingest(
+        args.paths,
+        embedding_model=config.endpoint.embedding_model,
+        timestamp=_now(),
+    )
     fs.write_text(config.index_path, json.dumps(index.to_dict()))
+    print(
+        f"Indexed {len(index.metadata.documents)} document(s), "
+        f"{len(index.chunks)} chunk(s) to {config.index_path}"
+    )
+    _print_codes(index)
+    return 0
+
+
+def _cmd_update(args: argparse.Namespace) -> int:
+    config = _config_from_args(args)
+    fs = RealFileSystem()
+    index = _load_index(fs, config.index_path)
+    if index is None:
+        return 1
+
+    pipeline = _ingest_pipeline(args, config, fs)
+    print("Updating against the endpoint...")
+    index, summary = pipeline.update(
+        index,
+        args.paths,
+        embedding_model=config.endpoint.embedding_model,
+        timestamp=_now(),
+    )
+    fs.write_text(config.index_path, json.dumps(index.to_dict()))
+    _print_summary(summary, config.index_path)
+    return 0
+
+
+def _cmd_remove(args: argparse.Namespace) -> int:
+    config = _config_from_args(args)
+    fs = RealFileSystem()
+    index = _load_index(fs, config.index_path)
+    if index is None:
+        return 1
+
+    pipeline = IngestionPipeline(fs, [], _make_embedder(config), config)
+    index, summary = pipeline.remove(index, args.paths, timestamp=_now())
+    if not summary.removed:
+        print("No matching documents found in the index.")
+        return 0
+    fs.write_text(config.index_path, json.dumps(index.to_dict()))
+    _print_summary(summary, config.index_path)
+    return 0
+
+
+def _cmd_info(args: argparse.Namespace) -> int:
+    config = _config_from_args(args)
+    fs = RealFileSystem()
+    index = _load_index(fs, config.index_path)
+    if index is None:
+        return 1
+
+    meta = index.metadata
+    dim = meta.vector_dim if meta.vector_dim is not None else "(unknown)"
+    print(f"Index: {config.index_path}")
+    print(f"  documents:       {len(meta.documents)}")
+    print(f"  chunks:          {len(index.chunks)}")
+    print(f"  embedding model: {meta.embedding_model or '(unknown)'}")
+    print(f"  vector dim:      {dim}")
+    print(f"  created:         {meta.created_at or '(unknown)'}")
+    print(f"  updated:         {meta.updated_at or '(unknown)'}")
+    if meta.documents:
+        print("  contents:")
+        for record in sorted(meta.documents, key=lambda r: r.source_path):
+            print(f"    - {record.source_path}  ({record.chunk_count} chunk(s))")
+    return 0
+
+
+def _print_codes(index: Index) -> None:
     codes = sorted(index.code_index.values)
-    print(f"Indexed {len(index.chunks)} chunk(s) to {config.index_path}")
     if codes:
         preview = ", ".join(codes[:12])
         suffix = ", ..." if len(codes) > 12 else ""
         print(f"Resolvable identifiers ({len(codes)}): {preview}{suffix}")
-    return 0
+
+
+def _print_summary(summary: IngestSummary, path: str) -> None:
+    parts: list[str] = []
+    if summary.added:
+        parts.append(f"{len(summary.added)} added")
+    if summary.refreshed:
+        parts.append(f"{len(summary.refreshed)} refreshed")
+    if summary.removed:
+        parts.append(f"{len(summary.removed)} removed")
+    if summary.skipped:
+        parts.append(f"{len(summary.skipped)} unchanged")
+    change = ", ".join(parts) if parts else "no changes"
+    print(
+        f"{change}; index now has {summary.total_documents} document(s), "
+        f"{summary.total_chunks} chunk(s) at {path}"
+    )
 
 
 def _cmd_ask(args: argparse.Namespace) -> int:
@@ -265,6 +405,7 @@ def _cmd_ask(args: argparse.Namespace) -> int:
         return 1
 
     index = Index.from_dict(json.loads(fs.read_text(config.index_path)))
+    _warn_model_mismatch(index, config.endpoint.embedding_model)
     embedder = _make_embedder(config)
     llm = _make_llm(config)
     engine = QueryEngine(embedder, llm, config, structured=args.json)
@@ -316,6 +457,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         return 1
 
     index = Index.from_dict(json.loads(fs.read_text(config.index_path)))
+    _warn_model_mismatch(index, config.endpoint.embedding_model)
     cases = parse_dataset(json.loads(fs.read_text(args.dataset)))
     engine = QueryEngine(_make_embedder(config), _make_llm(config), config)
 
