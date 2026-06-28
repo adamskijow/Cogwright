@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "question": "How do I clear alarm 204?",
+      "expected_pages": [3],
+      "expected_codes": ["AL-204"],
+      "should_find": true
+    },
+    {
+      "question": "AL-204",
+      "expected_pages": [3],
+      "expected_codes": ["AL-204"],
+      "should_find": true
+    },
+    {
+      "question": "What does stop code SC-12 mean?",
+      "expected_pages": [3],
+      "expected_codes": ["SC-12"],
+      "should_find": true
+    },
+    {
+      "question": "What is the startup procedure?",
+      "expected_pages": [2],
+      "should_find": true
+    },
+    {
+      "question": "Which part number is the drive belt?",
+      "expected_pages": [4],
+      "expected_codes": ["PN-44-19A"],
+      "should_find": true
+    },
+    {
+      "question": "Bluetooth pairing instructions",
+      "should_find": false
+    },
+    {
+      "question": "wireless network configuration menu",
+      "should_find": false
+    }
+  ]
+}

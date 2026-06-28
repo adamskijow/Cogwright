@@ -21,9 +21,10 @@ from ..core.config import Config, EndpointConfig, RetrievalConfig
 from ..core.engine import IngestionPipeline, QueryEngine
 from ..core.errors import CogwrightError, ModelUnavailableError
 from ..core.index import Index
-from ..core.models import Answer
+from ..core.models import Answer, ScoredChunk
 from ..core.prompt import NOT_FOUND_MESSAGE
 from ..core.protocols import DocumentParser
+from ..eval import evaluate, parse_dataset
 from ..adapters.filesystem import RealFileSystem
 from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
 from ..adapters.pdf_parser import PdfDocumentParser
@@ -41,6 +42,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_ingest(args)
         if args.command == "ask":
             return _cmd_ask(args)
+        if args.command == "eval":
+            return _cmd_eval(args)
     except ModelUnavailableError as exc:
         print(f"error: {exc}", file=sys.stderr)
         print(
@@ -94,6 +97,24 @@ def _build_parser() -> argparse.ArgumentParser:
     ask.add_argument(
         "--no-stream", action="store_true", help="wait for the full answer"
     )
+    ask.add_argument(
+        "--show-retrieved",
+        action="store_true",
+        help="print the retrieved passages and their scores before answering",
+    )
+
+    evaluate_cmd = subparsers.add_parser(
+        "eval",
+        help="score retrieval quality against a graded dataset (no model call)",
+    )
+    evaluate_cmd.add_argument("dataset", help="path to a graded dataset JSON file")
+    _add_common_args(evaluate_cmd)
+    evaluate_cmd.add_argument(
+        "--embedding-model",
+        default=os.environ.get("COGWRIGHT_EMBEDDING_MODEL"),
+        help="embedding model name served by the endpoint",
+    )
+    evaluate_cmd.add_argument("--top-k", type=int, default=None, help="passages to retrieve")
     return parser
 
 
@@ -195,6 +216,8 @@ def _cmd_ask(args: argparse.Namespace) -> int:
     engine = QueryEngine(embedder, llm, config)
 
     prep = engine.prepare(index, args.question)
+    if args.show_retrieved:
+        _print_retrieved(prep.retrieved)
     if not prep.found:
         print(NOT_FOUND_MESSAGE)
         return 0
@@ -215,6 +238,43 @@ def _cmd_ask(args: argparse.Namespace) -> int:
         print(answer.text)
     _print_provenance(answer)
     return 0
+
+
+def _cmd_eval(args: argparse.Namespace) -> int:
+    config = _config_from_args(args)
+    fs = RealFileSystem()
+    if not fs.exists(config.index_path):
+        print(
+            f"error: no index found at {config.index_path}. "
+            "Run 'cogwright ingest <paths>' first.",
+            file=sys.stderr,
+        )
+        return 1
+    if not fs.exists(args.dataset):
+        print(f"error: no dataset found at {args.dataset}.", file=sys.stderr)
+        return 1
+
+    index = Index.from_dict(json.loads(fs.read_text(config.index_path)))
+    cases = parse_dataset(json.loads(fs.read_text(args.dataset)))
+    engine = QueryEngine(_make_embedder(config), _make_llm(config), config)
+
+    report = evaluate(cases, lambda question: engine.prepare(index, question))
+    print(report.summary())
+    return 0
+
+
+def _print_retrieved(retrieved: Sequence[ScoredChunk]) -> None:
+    if not retrieved:
+        print("Retrieved: (nothing cleared the relevance threshold)")
+        return
+    print("Retrieved:")
+    for scored in retrieved:
+        chunk = scored.chunk
+        label = f"  [{chunk.chunk_id}] p{chunk.page} {scored.match_type} {scored.score:.3f}"
+        if chunk.section:
+            label += f" | {chunk.section}"
+        print(label)
+    print()
 
 
 def _print_provenance(answer: Answer) -> None:
