@@ -93,3 +93,17 @@ class OcrEngine(Protocol):
     """
 
     def image_to_text(self, image: bytes) -> str: ...
+
+
+@runtime_checkable
+class DiagramAnalyzer(Protocol):
+    """Describes the figures and callouts on a rendered page image.
+
+    This is the seam for exploded-diagram and callout understanding. A page that
+    contains figures is rendered and handed here; the returned strings, one per
+    callout or caption, are attached as caption blocks so a query can reach the
+    labels printed on a diagram. The analyzer owns any region detection it needs
+    and receives encoded image bytes (PNG), keeping the core imaging-free.
+    """
+
+    def describe(self, image: bytes) -> Sequence[str]: ...

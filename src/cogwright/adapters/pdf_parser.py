@@ -23,7 +23,7 @@ from typing import Any
 
 from ..core.errors import CogwrightError
 from ..core.models import BlockKind, Document, TextBlock
-from ..core.protocols import OcrEngine
+from ..core.protocols import DiagramAnalyzer, OcrEngine
 from .text_parser import parse_lines
 
 
@@ -36,6 +36,8 @@ class PdfDocumentParser:
         ocr_dpi: int = 200,
         ocr_min_chars: int = 16,
         ocr_image_ratio: float = 0.5,
+        diagram_analyzer: DiagramAnalyzer | None = None,
+        diagram_min_image_ratio: float = 0.1,
     ) -> None:
         # When no engine is supplied, scanned pages are skipped rather than
         # guessed at, keeping born-digital behavior identical to before.
@@ -49,6 +51,10 @@ class PdfDocumentParser:
         # needlessly rerecognized.
         self._ocr_min_chars = ocr_min_chars
         self._ocr_image_ratio = ocr_image_ratio
+        # A page is analyzed for diagram callouts when an embedded image covers
+        # at least this fraction of it, so a small logo does not trigger work.
+        self._diagram_analyzer = diagram_analyzer
+        self._diagram_min_image_ratio = diagram_min_image_ratio
 
     def supports(self, path: str) -> bool:
         return path.lower().endswith(".pdf")
@@ -92,22 +98,44 @@ class PdfDocumentParser:
         else:
             text = page.extract_text() or ""
 
-        # A page that looks scanned is rendered and recognized through the OCR
-        # seam when one is configured.
-        if self._ocr_engine is not None and self._needs_ocr(page, text):
-            text = self._ocr_engine.image_to_text(_render_png(page, self._ocr_dpi))
+        image_ratio = _image_area_ratio(page)
+        # The rendered page image is shared by the OCR and diagram passes so a
+        # page that needs both is only rasterized once.
+        rendered: bytes | None = None
+
+        if self._ocr_engine is not None and self._needs_ocr(text, image_ratio):
+            rendered = _render_png(page, self._ocr_dpi)
+            text = self._ocr_engine.image_to_text(rendered)
 
         blocks = parse_lines(text, page_number)
         for table in tables:
             table_block = _table_block(table.extract(), page_number)
             if table_block is not None:
                 blocks.append(table_block)
+
+        if (
+            self._diagram_analyzer is not None
+            and image_ratio >= self._diagram_min_image_ratio
+        ):
+            if rendered is None:
+                rendered = _render_png(page, self._ocr_dpi)
+            for caption in self._diagram_analyzer.describe(rendered):
+                text_value = caption.strip()
+                if text_value:
+                    blocks.append(
+                        TextBlock(
+                            kind=BlockKind.CAPTION,
+                            text=text_value,
+                            page=page_number,
+                            section="Figure",
+                        )
+                    )
         return blocks
 
-    def _needs_ocr(self, page: Any, text: str) -> bool:
+    def _needs_ocr(self, text: str, image_ratio: float) -> bool:
         if len(text.strip()) >= self._ocr_min_chars:
             return False
-        return _image_area_ratio(page) >= self._ocr_image_ratio
+        return image_ratio >= self._ocr_image_ratio
 
 
 def _image_area_ratio(page: Any) -> float:

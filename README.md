@@ -175,15 +175,20 @@ question -> code detect + Embedder -> hybrid retrieval -> PromptBuilder -> LLMCl
 
 ### Strict separation behind protocol seams
 
-The core library holds all retrieval and decision logic and depends only on five
+The core library holds all retrieval and decision logic and depends only on
 protocols, never on a concrete model, vector store, or web framework:
 
-- `FileSystem`, `DocumentParser`, `Embedder`, `LLMClient`, `VectorStore`.
+- the five core seams `FileSystem`, `DocumentParser`, `Embedder`, `LLMClient`,
+  and `VectorStore`,
+- and two extension seams for richer ingestion: `OcrEngine` for scanned pages
+  and `DiagramAnalyzer` for figure callouts.
 
 The adapter layer supplies real implementations (disk access, text and PDF
-parsers, the HTTP model client, and an in-memory vector store), and the test
-suite supplies deterministic fakes. This keeps the core fully unit-testable with
-no live model.
+parsers, the HTTP model client, an in-memory vector store, and a reference OCR
+engine), and the test suite supplies deterministic fakes. This keeps the core
+fully unit-testable with no live model. A `DiagramAnalyzer` is supplied to the
+PDF parser programmatically; the seam is in place and any vision-backed
+implementation plugs in without other changes.
 
 ### Structure-aware ingestion
 
@@ -251,7 +256,8 @@ Landed since the first milestone:
 Still ahead. The seams needed for these are already in place.
 
 - Layout-aware recognition and quality tuning for low-quality scans.
-- Region understanding for exploded diagrams and callouts.
+- A vision-backed `DiagramAnalyzer` for exploded diagrams and callouts; the
+  parser seam and caption handling are already in place.
 - Video ingestion.
 - Live-telemetry and equipment-monitoring integration.
 - Role-based access and multi-tenant accounts.

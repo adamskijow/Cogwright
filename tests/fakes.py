@@ -205,3 +205,15 @@ class FakeOcrEngine:
     def image_to_text(self, image: bytes) -> str:
         self.calls.append(image)
         return self.text
+
+
+class FakeDiagramAnalyzer:
+    """Returns canned captions and records the image bytes it was handed."""
+
+    def __init__(self, captions: Sequence[str]) -> None:
+        self.captions = list(captions)
+        self.calls: list[bytes] = []
+
+    def describe(self, image: bytes) -> list[str]:
+        self.calls.append(image)
+        return list(self.captions)

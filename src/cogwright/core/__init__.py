@@ -45,6 +45,7 @@ from .models import (
 )
 from .prompt import NOT_FOUND_MESSAGE, PromptBuilder
 from .protocols import (
+    DiagramAnalyzer,
     DocumentParser,
     Embedder,
     FileSystem,
@@ -69,6 +70,7 @@ __all__ = [
     "CogwrightError",
     "Config",
     "DEFAULT_CODE_PATTERNS",
+    "DiagramAnalyzer",
     "Document",
     "DocumentParser",
     "Embedder",
