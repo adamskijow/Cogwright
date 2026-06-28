@@ -34,11 +34,21 @@ class PdfDocumentParser:
         self,
         ocr_engine: OcrEngine | None = None,
         ocr_dpi: int = 200,
+        ocr_min_chars: int = 16,
+        ocr_image_ratio: float = 0.5,
     ) -> None:
         # When no engine is supplied, scanned pages are skipped rather than
         # guessed at, keeping born-digital behavior identical to before.
         self._ocr_engine = ocr_engine
         self._ocr_dpi = ocr_dpi
+        # A page is treated as scanned when its recoverable text is shorter than
+        # this and a raster image covers at least this fraction of the page. The
+        # text threshold (rather than strictly empty) catches pages that carry
+        # only a stray page number; the image-coverage test keeps born-digital
+        # pages, including table-only ones drawn with vector rules, from being
+        # needlessly rerecognized.
+        self._ocr_min_chars = ocr_min_chars
+        self._ocr_image_ratio = ocr_image_ratio
 
     def supports(self, path: str) -> bool:
         return path.lower().endswith(".pdf")
@@ -82,9 +92,9 @@ class PdfDocumentParser:
         else:
             text = page.extract_text() or ""
 
-        # A page with no recoverable text layer is treated as scanned: render it
-        # and recognize the text through the OCR seam when one is configured.
-        if not text.strip() and self._ocr_engine is not None:
+        # A page that looks scanned is rendered and recognized through the OCR
+        # seam when one is configured.
+        if self._ocr_engine is not None and self._needs_ocr(page, text):
             text = self._ocr_engine.image_to_text(_render_png(page, self._ocr_dpi))
 
         blocks = parse_lines(text, page_number)
@@ -93,6 +103,23 @@ class PdfDocumentParser:
             if table_block is not None:
                 blocks.append(table_block)
         return blocks
+
+    def _needs_ocr(self, page: Any, text: str) -> bool:
+        if len(text.strip()) >= self._ocr_min_chars:
+            return False
+        return _image_area_ratio(page) >= self._ocr_image_ratio
+
+
+def _image_area_ratio(page: Any) -> float:
+    """Fraction of the page covered by embedded raster images, capped at 1.0."""
+
+    page_area = float(page.width) * float(page.height)
+    if page_area <= 0:
+        return 0.0
+    covered = 0.0
+    for image in page.images:
+        covered += (image["x1"] - image["x0"]) * (image["bottom"] - image["top"])
+    return min(covered / page_area, 1.0)
 
 
 def _render_png(page: Any, dpi: int) -> bytes:

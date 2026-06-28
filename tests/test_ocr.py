@@ -32,15 +32,47 @@ Alarm 204 indicates low coolant pressure.
 """
 
 
-def _image_only_pdf() -> bytes:
+def _scanned_pdf(overlay: str | None = None) -> bytes:
+    """A page that is essentially one large raster image, like a scan."""
+
+    from PIL import Image
     from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
+
+    image = Image.new("RGB", (800, 1000), (210, 210, 210))
+    image_bytes = io.BytesIO()
+    image.save(image_bytes, format="PNG")
+    image_bytes.seek(0)
 
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=LETTER)
-    # Draw only shapes, never text, so the page has no recoverable text layer.
-    pdf.rect(72, 600, 200, 80, fill=1)
-    pdf.circle(300, 400, 50, fill=1)
+    # Cover most of the page with the image so it reads as scanned.
+    pdf.drawImage(ImageReader(image_bytes), 30, 40, width=552, height=712)
+    if overlay is not None:
+        pdf.drawString(72, 20, overlay)
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
+def _born_digital_with_small_logo() -> bytes:
+    """A sparse text page with a small image, which must not be rerecognized."""
+
+    from PIL import Image
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    logo = Image.new("RGB", (40, 40), (10, 10, 10))
+    logo_bytes = io.BytesIO()
+    logo.save(logo_bytes, format="PNG")
+    logo_bytes.seek(0)
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=LETTER)
+    pdf.drawImage(ImageReader(logo_bytes), 72, 700, width=40, height=40)
+    pdf.drawString(72, 680, "Note")
     pdf.showPage()
     pdf.save()
     return buffer.getvalue()
@@ -62,7 +94,7 @@ def test_scanned_page_is_routed_through_ocr() -> None:
     engine = FakeOcrEngine(OCR_TEXT)
     parser = PdfDocumentParser(ocr_engine=engine)
 
-    doc = parser.parse("scan.pdf", _image_only_pdf())
+    doc = parser.parse("scan.pdf", _scanned_pdf())
 
     # The engine was called once with non-empty rendered image bytes.
     assert len(engine.calls) == 1
@@ -76,10 +108,22 @@ def test_scanned_page_is_routed_through_ocr() -> None:
 
 def test_recognized_codes_resolve_after_chunking() -> None:
     parser = PdfDocumentParser(ocr_engine=FakeOcrEngine(OCR_TEXT))
-    doc = parser.parse("scan.pdf", _image_only_pdf())
+    doc = parser.parse("scan.pdf", _scanned_pdf())
     chunks = chunk_document(doc, ChunkingConfig(), CodeIndexer(DEFAULT_CODE_PATTERNS))
     values = {code.value for chunk in chunks for code in chunk.codes}
     assert "AL-204" in values
+
+
+def test_page_with_only_a_page_number_is_still_routed() -> None:
+    engine = FakeOcrEngine(OCR_TEXT)
+    parser = PdfDocumentParser(ocr_engine=engine)
+
+    # A stray page number is below the text threshold, and the page is image
+    # dominated, so it is recognized rather than treated as born-digital.
+    doc = parser.parse("scan.pdf", _scanned_pdf(overlay="12"))
+
+    assert len(engine.calls) == 1
+    assert any(b.kind == BlockKind.HEADING for b in doc.blocks)
 
 
 def test_born_digital_page_does_not_call_ocr() -> None:
@@ -93,7 +137,19 @@ def test_born_digital_page_does_not_call_ocr() -> None:
     assert any("Born-digital" in b.text for b in doc.blocks)
 
 
+def test_sparse_page_with_a_small_image_is_not_rerecognized() -> None:
+    engine = FakeOcrEngine("should not be used")
+    parser = PdfDocumentParser(ocr_engine=engine)
+
+    # Little text but the image covers only a small fraction of the page, so it
+    # is left as born-digital rather than sent to OCR.
+    doc = parser.parse("note.pdf", _born_digital_with_small_logo())
+
+    assert engine.calls == []
+    assert any("Note" in b.text for b in doc.blocks)
+
+
 def test_no_engine_means_scanned_pages_yield_no_blocks() -> None:
     parser = PdfDocumentParser()
-    doc = parser.parse("scan.pdf", _image_only_pdf())
+    doc = parser.parse("scan.pdf", _scanned_pdf())
     assert doc.blocks == ()
