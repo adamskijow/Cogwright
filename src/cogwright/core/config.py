@@ -95,7 +95,13 @@ class RetrievalConfig:
     # A semantic match below this cosine score is treated as not relevant. When
     # no chunk clears the bar and no exact code lookup hits, the engine returns
     # the not-found answer rather than inventing one.
-    min_score: float = 0.15
+    #
+    # This value is embedding-model dependent: different models place related and
+    # unrelated text at different similarity ranges, so there is no universal
+    # cutoff. The default suits typical normalized sentence-embedding models;
+    # calibrate it for your model with `cogwright eval` and `--min-score`, raising
+    # it until unrelated questions report not-found while real ones still resolve.
+    min_score: float = 0.45
     # Exact code and part lookups are precise, so they are ranked above any
     # purely semantic match. This base score is added on top of cosine.
     code_base_score: float = 1.0

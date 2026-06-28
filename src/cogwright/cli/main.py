@@ -23,7 +23,7 @@ from ..adapters.ocr import PytesseractOcrEngine
 from ..adapters.pdf_parser import PdfDocumentParser
 from ..adapters.text_parser import TextDocumentParser
 from ..adapters.vision import VisionDiagramAnalyzer
-from ..core.citation import strip_citation_markers
+from ..core.citation import clean_answer_text
 from ..core.config import Config, EndpointConfig, RetrievalConfig
 from ..core.engine import IngestionPipeline, QueryEngine
 from ..core.errors import CogwrightError, ModelUnavailableError
@@ -113,6 +113,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ask.add_argument("--top-k", type=int, default=None, help="passages to retrieve")
     ask.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="minimum cosine score for a semantic match (calibrate per model)",
+    )
+    ask.add_argument(
         "--no-stream", action="store_true", help="wait for the full answer"
     )
     ask.add_argument(
@@ -133,6 +139,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="embedding model name served by the endpoint",
     )
     evaluate_cmd.add_argument("--top-k", type=int, default=None, help="passages to retrieve")
+    evaluate_cmd.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="minimum cosine score for a semantic match (calibrate per model)",
+    )
     return parser
 
 
@@ -167,6 +179,9 @@ def _config_from_args(args: argparse.Namespace) -> Config:
     top_k = getattr(args, "top_k", None)
     if top_k:
         retrieval = dataclasses.replace(retrieval, top_k=top_k)
+    min_score = getattr(args, "min_score", None)
+    if min_score is not None:
+        retrieval = dataclasses.replace(retrieval, min_score=min_score)
     return Config(index_path=args.index, endpoint=endpoint, retrieval=retrieval)
 
 
@@ -269,8 +284,8 @@ def _cmd_ask(args: argparse.Namespace) -> int:
     answer = engine.assemble(prep, answer_text)
     if args.no_stream:
         # Streaming already printed the raw text live; for the buffered path show
-        # the answer with citation markers removed for readability.
-        print(strip_citation_markers(answer.text))
+        # the answer with citation markers and any stray not-found line removed.
+        print(clean_answer_text(answer.text, NOT_FOUND_MESSAGE))
     _print_provenance(answer)
     return 0
 

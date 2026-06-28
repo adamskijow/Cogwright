@@ -25,6 +25,9 @@ _ID_TOKEN = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{6,32}(?![0-9a-fA-F])")
 # A bracketed run of one or more ids, removed when cleaning an answer for display.
 _CITATION_GROUP = re.compile(r"\s*\[[0-9a-f][0-9a-f,;\s]*\]")
 
+# How many top-ranked passages to cite when the model itself cited none.
+_MAX_FALLBACK_CITATIONS = 3
+
 
 def strip_citation_markers(text: str) -> str:
     """Remove bracketed citation groups for clean display, leaving prose intact."""
@@ -33,6 +36,23 @@ def strip_citation_markers(text: str) -> str:
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r" +\n", "\n", cleaned)
     return cleaned.strip()
+
+
+def clean_answer_text(text: str, drop_line: str) -> str:
+    """Prepare an answered reply for display.
+
+    Strips citation markers and removes any standalone line equal to
+    ``drop_line``. Small models sometimes append the not-found sentence even
+    after answering; passing it here keeps it out of a grounded reply.
+    """
+
+    target = drop_line.strip()
+    lines = [
+        line
+        for line in strip_citation_markers(text).splitlines()
+        if line.strip() != target
+    ]
+    return "\n".join(lines).strip()
 
 
 class CitationMapper:
@@ -68,12 +88,14 @@ class CitationMapper:
         self,
         answer_text: str,
         retrieved: Sequence[ScoredChunk],
+        max_fallback: int = _MAX_FALLBACK_CITATIONS,
     ) -> tuple[Citation, ...]:
         """Resolve the citations for an answer.
 
-        Prefers the ids the model actually cited; if it cited none that we
-        recognize, falls back to the retrieved passages so the answer still
-        points at where it came from.
+        Prefers the ids the model actually cited. If it cited none that we
+        recognize, which smaller models often do, falls back to the highest
+        ranked retrieved passages, capped so a weakly grounded answer is not
+        decorated with every passage that was in context.
         """
 
         cited_ids = self.extract_cited_ids(answer_text)
@@ -94,4 +116,6 @@ class CitationMapper:
                     section=scored.chunk.section,
                 )
             )
+            if len(fallback) >= max_fallback:
+                break
         return tuple(fallback)

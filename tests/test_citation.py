@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
-from cogwright.core.citation import CitationMapper, strip_citation_markers
+from cogwright.core.citation import (
+    CitationMapper,
+    clean_answer_text,
+    strip_citation_markers,
+)
 from cogwright.core.models import ScoredChunk
 
 from .builders import chunk
@@ -66,3 +70,24 @@ def test_extract_handles_multi_id_and_inline_citations() -> None:
 def test_strip_citation_markers_removes_brackets_and_tidies_spacing() -> None:
     text = "Do step one [a1b2c3d4] then step two [a1b2c3d4, e5f6a7b8]."
     assert strip_citation_markers(text) == "Do step one then step two."
+
+
+def test_clean_answer_text_drops_a_stray_not_found_line() -> None:
+    not_found = "I could not find an answer to that in the provided documents."
+    raw = f"1. Stop the unit. [a1b2c3d4]\n2. Refill coolant.\n{not_found}"
+    cleaned = clean_answer_text(raw, not_found)
+    assert cleaned == "1. Stop the unit.\n2. Refill coolant."
+    assert not_found not in cleaned
+
+
+def test_fallback_citations_are_capped() -> None:
+    chunks = {f"{i:08x}": chunk(f"{i:08x}", page=i) for i in range(1, 7)}
+    mapper = CitationMapper(chunks)
+    retrieved = [
+        ScoredChunk(chunk=c, score=1.0 - i / 10, match_type="semantic")
+        for i, c in enumerate(chunks.values())
+    ]
+    # The model cited nothing, so the fallback is used but limited to the top few.
+    citations = mapper.map_answer("a grounded answer with no ids", retrieved)
+    assert len(citations) == 3
+    assert [c.chunk_id for c in citations] == [r.chunk.chunk_id for r in retrieved[:3]]

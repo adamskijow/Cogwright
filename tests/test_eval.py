@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from cogwright.adapters.text_parser import TextDocumentParser
-from cogwright.core.config import Config
+from cogwright.core.config import Config, RetrievalConfig
 from cogwright.core.engine import IngestionPipeline, QueryEngine
 from cogwright.core.index import Index
 from cogwright.eval import evaluate, parse_dataset
@@ -22,6 +22,11 @@ from .fakes import FakeEmbedder, FakeFileSystem, FakeLLMClient
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "sample_manual"
 MANUAL = FIXTURE_DIR / "series7_conveyor_manual.txt"
 DATASET = FIXTURE_DIR / "eval.json"
+
+# The bag-of-words test embedder scores matches on a lower similarity scale than
+# real models, so these eval runs use a threshold calibrated to that fake rather
+# than the real-model default.
+FAKE_CONFIG = Config(retrieval=RetrievalConfig(min_score=0.15))
 
 
 def _index(embedder: FakeEmbedder, config: Config) -> Index:
@@ -48,7 +53,7 @@ def test_parse_dataset_requires_question() -> None:
 
 def test_shipped_dataset_scores_perfectly_on_the_fixture() -> None:
     embedder = FakeEmbedder()
-    config = Config()
+    config = FAKE_CONFIG
     index = _index(embedder, config)
     engine = QueryEngine(embedder, FakeLLMClient(), config)
 
@@ -66,7 +71,7 @@ def test_shipped_dataset_scores_perfectly_on_the_fixture() -> None:
 
 def test_report_flags_a_missed_page() -> None:
     embedder = FakeEmbedder()
-    config = Config()
+    config = FAKE_CONFIG
     index = _index(embedder, config)
     engine = QueryEngine(embedder, FakeLLMClient(), config)
 
