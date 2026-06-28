@@ -49,17 +49,25 @@ disk.
 
 ## Supported documents
 
-The first milestone handles:
+Out of the box, with no extra dependencies:
 
 - plain text (`.txt`, `.text`),
 - Markdown (`.md`, `.markdown`),
 - born-digital PDFs (`.pdf`), including tables, where the page has a real text
   layer.
 
-Scanned or photographed pages and exploded-diagram regions need optical and
-layout understanding and are intentionally out of scope for now; see the
-[roadmap](#roadmap). The parser seam is already in place so that work can be
-added without touching the core.
+Scanned and photographed PDF pages (no text layer) are supported through an
+optional optical-recognition engine. Install the extra and recognized text is
+structured exactly like born-digital text:
+
+```sh
+uv sync --extra ocr
+```
+
+Recognition quality depends on the engine and the scan, so this path is newer
+than the born-digital one. Exploded-diagram region understanding is still future
+work; see the [roadmap](#roadmap). Both sit behind the same parser seam, so they
+were added, and can be extended, without touching the core.
 
 ## Installation
 
@@ -128,9 +136,27 @@ Sources:
   - manuals/series7_conveyor_manual.txt (page 3, section: ALARM AND STOP CODE REFERENCE)
 ```
 
-A bare alarm code, stop code, or part number resolves to the exact passage that
-documents it. When the corpus does not contain the answer, Cogwright says so
-instead of inventing a procedure.
+A bare alarm code, stop code, fault, error, diagnostic trouble code, warning, or
+part number resolves to the exact passage that documents it. When the corpus does
+not contain the answer, Cogwright says so instead of inventing a procedure.
+
+To see which passages retrieval surfaced and how they ranked, add
+`--show-retrieved` to `ask`.
+
+## Evaluating retrieval quality
+
+Retrieval quality can be measured against a graded dataset without calling the
+model. A dataset pairs each question with the source pages it should surface, the
+identifiers it should resolve, and whether it is answerable at all.
+
+```sh
+uv run cogwright eval tests/fixtures/sample_manual/eval.json \
+  --base-url http://localhost:8000/v1 --embedding-model your-embedding-model
+```
+
+It reports found accuracy, page hit rate, code-resolution accuracy, and
+not-found accuracy, each with its counts, so a change in chunking or retrieval
+shows up as a number.
 
 ## Design
 
@@ -175,9 +201,10 @@ document yields the same identifiers and citations stay stable across runs.
 ### Code and part lookup as a first-class index
 
 A dedicated pass detects and indexes alarm codes, stop codes, fault and error
-identifiers, and part numbers as exact lookup keys. The rules are configurable
-patterns, not hardcoded schemes, so a bare query such as `AL-204`, `alarm 204`,
-or `SC-12` resolves to the precise passage that documents it.
+identifiers, diagnostic trouble codes, warning codes, and part numbers as exact
+lookup keys. The rules are configurable patterns, not hardcoded schemes, so a
+bare query such as `AL-204`, `alarm 204`, or `SC-12` resolves to the precise
+passage that documents it.
 
 ### Hybrid retrieval and grounded answers
 
@@ -198,11 +225,13 @@ an end-to-end run of ingest and ask against a small synthetic manual for an
 invented machine.
 
 ```sh
-uv run pytest          # run the test suite
+uv run pytest          # run the test suite, including the end-to-end fixture run
 uv run mypy            # strict static type checking
+uv run ruff check .    # lint and import order
 ```
 
-No live model is used in the tests.
+No live model is used in the tests. The same three checks run in continuous
+integration on every push and pull request.
 
 ## Licensing
 
@@ -213,10 +242,15 @@ including in the PDF path, to keep the dependency tree MIT-compatible.
 
 ## Roadmap
 
-The following are out of scope for the first milestone and tracked as future
-work. The seams needed for them are already in place.
+Landed since the first milestone:
 
-- Optical and layout understanding of scanned or photographed pages.
+- Scanned-page optical recognition behind the parser seam, available through the
+  optional `ocr` extra.
+- A retrieval evaluation harness and `eval` command.
+
+Still ahead. The seams needed for these are already in place.
+
+- Layout-aware recognition and quality tuning for low-quality scans.
 - Region understanding for exploded diagrams and callouts.
 - Video ingestion.
 - Live-telemetry and equipment-monitoring integration.

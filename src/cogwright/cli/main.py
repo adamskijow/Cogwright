@@ -19,6 +19,7 @@ from collections.abc import Sequence
 
 from ..adapters.filesystem import RealFileSystem
 from ..adapters.http_endpoint import HttpEmbedder, HttpLLMClient
+from ..adapters.ocr import PytesseractOcrEngine
 from ..adapters.pdf_parser import PdfDocumentParser
 from ..adapters.text_parser import TextDocumentParser
 from ..core.config import Config, EndpointConfig, RetrievalConfig
@@ -76,6 +77,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--embedding-model",
         default=os.environ.get("COGWRIGHT_EMBEDDING_MODEL"),
         help="embedding model name served by the endpoint",
+    )
+    ingest.add_argument(
+        "--ocr",
+        action="store_true",
+        help="recognize scanned PDF pages that have no text layer (needs the ocr extra)",
     )
 
     ask = subparsers.add_parser(
@@ -174,7 +180,11 @@ def _make_llm(config: Config) -> HttpLLMClient:
 def _cmd_ingest(args: argparse.Namespace) -> int:
     config = _config_from_args(args)
     fs = RealFileSystem()
-    parsers: list[DocumentParser] = [TextDocumentParser(), PdfDocumentParser()]
+    ocr_engine = PytesseractOcrEngine() if args.ocr else None
+    parsers: list[DocumentParser] = [
+        TextDocumentParser(),
+        PdfDocumentParser(ocr_engine=ocr_engine),
+    ]
     embedder = _make_embedder(config)
 
     pipeline = IngestionPipeline(fs, parsers, embedder, config)

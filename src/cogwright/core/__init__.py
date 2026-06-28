@@ -49,6 +49,7 @@ from .protocols import (
     Embedder,
     FileSystem,
     LLMClient,
+    OcrEngine,
     VectorStore,
 )
 from .retrieval import retrieve
@@ -80,6 +81,7 @@ __all__ = [
     "Message",
     "ModelUnavailableError",
     "NOT_FOUND_MESSAGE",
+    "OcrEngine",
     "Preparation",
     "PromptBuilder",
     "QueryEngine",

@@ -35,6 +35,15 @@ dependencies = [
     "pdfplumber>=0.11.4",
 ]
 
+[project.optional-dependencies]
+# Scanned-page support (milestone two). Pulled in only with "cogwright[ocr]".
+# pytesseract is Apache-2.0 and binds to the Apache-2.0 Tesseract engine, which
+# must be installed separately. Pillow is already present transitively.
+ocr = [
+    "pytesseract>=0.3.10",
+    "pillow>=10.0",
+]
+
 [project.scripts]
 cogwright = "cogwright.cli.main:main"
 
@@ -68,7 +77,13 @@ files = ["src", "tests"]
 # generate a PDF test fixture) likewise. These are the only places untyped
 # imports are tolerated, isolated here.
 [[tool.mypy.overrides]]
-module = ["pdfplumber", "pdfplumber.*", "reportlab", "reportlab.*"]
+module = [
+    "pdfplumber",
+    "pdfplumber.*",
+    "reportlab",
+    "reportlab.*",
+    "pytesseract",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

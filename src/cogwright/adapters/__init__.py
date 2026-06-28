@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .filesystem import RealFileSystem
 from .http_endpoint import HttpEmbedder, HttpLLMClient
+from .ocr import PytesseractOcrEngine
 from .pdf_parser import PdfDocumentParser
 from .text_parser import TextDocumentParser
 
@@ -18,6 +19,7 @@ __all__ = [
     "HttpEmbedder",
     "HttpLLMClient",
     "PdfDocumentParser",
+    "PytesseractOcrEngine",
     "RealFileSystem",
     "TextDocumentParser",
 ]

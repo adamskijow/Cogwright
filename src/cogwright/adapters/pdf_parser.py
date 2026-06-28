@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 The Cogwright Authors
-"""A parser for born-digital PDF manuals.
+"""A parser for born-digital PDF manuals, with an optional scanned-page path.
 
 It uses a permissively licensed PDF toolkit to pull text and tables out of each
 page, keeping real page numbers for citations and lifting tables out as
 structured blocks so the chunker can keep them intact. The toolkit is imported
 lazily, so text-only deployments never load it.
 
-Scope note: this targets born-digital PDFs with a recoverable text layer.
-Scanned or photographed pages and exploded-diagram regions need optical and
-layout models and are deliberately out of scope for the first milestone; that
-work slots in behind this same parser seam without touching the core.
+Born-digital pages with a recoverable text layer are the primary path. When a
+page has no text layer and an :class:`OcrEngine` is supplied, the page is
+rendered to an image and recognized through that seam, then structured exactly
+like born-digital text. Without an engine, such a page simply yields no blocks,
+so behavior is unchanged for text-only use. Diagram-region understanding remains
+future work behind this same seam.
 """
 
 from __future__ import annotations
@@ -21,11 +23,22 @@ from typing import Any
 
 from ..core.errors import CogwrightError
 from ..core.models import BlockKind, Document, TextBlock
+from ..core.protocols import OcrEngine
 from .text_parser import parse_lines
 
 
 class PdfDocumentParser:
     """Parses ``.pdf`` documents into normalized blocks, page by page."""
+
+    def __init__(
+        self,
+        ocr_engine: OcrEngine | None = None,
+        ocr_dpi: int = 200,
+    ) -> None:
+        # When no engine is supplied, scanned pages are skipped rather than
+        # guessed at, keeping born-digital behavior identical to before.
+        self._ocr_engine = ocr_engine
+        self._ocr_dpi = ocr_dpi
 
     def supports(self, path: str) -> bool:
         return path.lower().endswith(".pdf")
@@ -69,12 +82,26 @@ class PdfDocumentParser:
         else:
             text = page.extract_text() or ""
 
+        # A page with no recoverable text layer is treated as scanned: render it
+        # and recognize the text through the OCR seam when one is configured.
+        if not text.strip() and self._ocr_engine is not None:
+            text = self._ocr_engine.image_to_text(_render_png(page, self._ocr_dpi))
+
         blocks = parse_lines(text, page_number)
         for table in tables:
             table_block = _table_block(table.extract(), page_number)
             if table_block is not None:
                 blocks.append(table_block)
         return blocks
+
+
+def _render_png(page: Any, dpi: int) -> bytes:
+    """Render a PDF page to PNG image bytes for recognition."""
+
+    image = page.to_image(resolution=dpi)
+    buffer = io.BytesIO()
+    image.original.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def _inside_any(obj: Any, bboxes: list[Any]) -> bool:

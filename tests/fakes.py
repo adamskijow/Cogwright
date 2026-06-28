@@ -193,3 +193,15 @@ def _parse_passages(user_message: str) -> list[tuple[str, list[str]]]:
     if current_id is not None:
         passages.append((current_id, body))
     return passages
+
+
+class FakeOcrEngine:
+    """Returns canned text and records the image bytes it was handed."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.calls: list[bytes] = []
+
+    def image_to_text(self, image: bytes) -> str:
+        self.calls.append(image)
+        return self.text

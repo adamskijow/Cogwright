@@ -79,3 +79,17 @@ class VectorStore(Protocol):
     def vectors(self) -> Mapping[str, Vector]: ...
 
     def load(self, data: Mapping[str, Vector]) -> None: ...
+
+
+@runtime_checkable
+class OcrEngine(Protocol):
+    """Recognizes text in a rendered page image.
+
+    This is the seam for milestone-two scanned-page support. A PDF page that has
+    no recoverable text layer is rendered to an image and handed here; the parser
+    then structures the returned text exactly as it does born-digital text. The
+    engine receives encoded image bytes (PNG) so the core stays free of any
+    imaging or model dependency.
+    """
+
+    def image_to_text(self, image: bytes) -> str: ...
