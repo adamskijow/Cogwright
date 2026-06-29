@@ -3,16 +3,18 @@ SPDX-License-Identifier: MIT
 SPDX-FileCopyrightText: 2026 The Cogwright Authors
 -->
 
-# Cogwright
+<p align="center">
+  <img src="https://raw.githubusercontent.com/adamskijow/Cogwright/main/assets/cogwright_banner.gif" alt="Cogwright: grounded, cited answers from your documents" width="820">
+</p>
 
 [![PyPI](https://img.shields.io/pypi/v/cogwright-rag)](https://pypi.org/project/cogwright-rag/)
 [![CI](https://github.com/adamskijow/Cogwright/actions/workflows/ci.yml/badge.svg)](https://github.com/adamskijow/Cogwright/actions/workflows/ci.yml)
 
-Cogwright answers questions about technical equipment documentation. Point it at
-a folder of manuals, service bulletins, and parts lists, ask in plain language,
+Cogwright answers questions about your technical documentation. Point it at a
+folder of manuals, specs, runbooks, or service bulletins, ask in plain language,
 and get a step-by-step answer grounded only in those documents, with citations to
-the source page. A bare alarm code, stop code, or part number resolves to the
-exact passage that defines it.
+the source page. Bare identifiers resolve too: an alarm code, an error code, or a
+part number jumps straight to the passage that defines it.
 
 It runs locally against a model endpoint you choose. Your documents and the index
 stay on your machine, and the only network calls go to that one endpoint.

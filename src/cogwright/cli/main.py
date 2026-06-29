@@ -86,7 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cogwright",
         description=(
-            "Local-first retrieval engine for technical equipment documentation."
+            "Local-first retrieval engine for technical documentation."
         ),
     )
     parser.add_argument(

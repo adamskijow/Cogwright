@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!--
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: 2026 The Cogwright Authors
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1220; overflow: hidden; }
+  #cwc { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay {
+    position: absolute; left: 52px; top: 0; bottom: 0; display: flex; flex-direction: column;
+    justify-content: center; gap: 13px; max-width: 60%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .row { display: flex; align-items: center; gap: 14px; }
+  .name { font-size: 46px; font-weight: 500; color: #f3f6fb; letter-spacing: -0.01em; }
+  .tag { font-size: 21px; color: #9db0c9; margin: 0; line-height: 1.45; }
+  .cmd { font-size: 16px; color: #5fd9c4; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+</style>
+</head>
+<body>
+<canvas id="cwc"></canvas>
+<div class="overlay">
+  <div class="row">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#5fd9c4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    <span class="name">Cogwright</span>
+  </div>
+  <p class="tag">Grounded, cited answers from your documents. Fully local.</p>
+  <span class="cmd">pip install cogwright-rag</span>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var canvas = document.getElementById("cwc");
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(1);
+  renderer.setClearColor(0x0b1220, 1);
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0, 13);
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+  var N = 640, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  var base = new THREE.Color(0x2c3a55), hot = new THREE.Color(0x5fe6cf);
+  for (var i = 0; i < N; i++) {
+    var th = Math.random() * 6.283, ph = Math.acos(2 * Math.random() - 1);
+    var r = 9 * Math.cbrt(Math.random());
+    pos[i*3]   = r * Math.sin(ph) * Math.cos(th) * 1.2 + 3.0;
+    pos[i*3+1] = r * Math.sin(ph) * Math.sin(th) * 0.6;
+    pos[i*3+2] = r * Math.cos(ph) * 0.85;
+    col[i*3] = base.r; col[i*3+1] = base.g; col[i*3+2] = base.b;
+  }
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  var points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.13, vertexColors: true, transparent: true, opacity: 0.96 }));
+  var cloud = new THREE.Group(); cloud.add(points); scene.add(cloud);
+  var lpos = new Float32Array(14 * 6);
+  var lgeo = new THREE.BufferGeometry();
+  lgeo.setAttribute("position", new THREE.BufferAttribute(lpos, 3));
+  var lines = new THREE.LineSegments(lgeo, new THREE.LineBasicMaterial({ color: 0x5fe6cf, transparent: true, opacity: 0.45 }));
+  cloud.add(lines);
+  var cAttr = geo.getAttribute("color");
+
+  var P = 8.0;
+  function renderAt(t) {
+    var a = (t / P) * 6.283185;
+    cloud.rotation.y = a;
+    cloud.rotation.x = Math.sin(a) * 0.13;
+    var q = new THREE.Vector3(Math.sin(a) * 5.6 + 2.4, Math.cos(a * 2) * 3.0, Math.sin(a * 3) * 3.6);
+    var rad = 3.1, near = [];
+    for (var i = 0; i < N; i++) {
+      var dx = pos[i*3]-q.x, dy = pos[i*3+1]-q.y, dz = pos[i*3+2]-q.z;
+      var d = Math.sqrt(dx*dx+dy*dy+dz*dz);
+      var g = Math.max(0, 1 - d / rad); g = g * g;
+      var pulse = 0.62 + 0.38 * Math.sin(a * 4 - d);
+      cAttr.array[i*3]   = base.r + (hot.r - base.r) * g * pulse;
+      cAttr.array[i*3+1] = base.g + (hot.g - base.g) * g * pulse;
+      cAttr.array[i*3+2] = base.b + (hot.b - base.b) * g * pulse;
+      if (g > 0.32) near.push([d, pos[i*3], pos[i*3+1], pos[i*3+2]]);
+    }
+    cAttr.needsUpdate = true;
+    near.sort(function (x, y) { return x[0] - y[0]; });
+    for (var k = 0; k < 14; k++) {
+      var p = near[k];
+      if (p) { lpos[k*6]=q.x;lpos[k*6+1]=q.y;lpos[k*6+2]=q.z;lpos[k*6+3]=p[1];lpos[k*6+4]=p[2];lpos[k*6+5]=p[3]; }
+      else { for (var j = 0; j < 6; j++) lpos[k*6+j] = 0; }
+    }
+    lines.geometry.getAttribute("position").needsUpdate = true;
+    renderer.render(scene, camera);
+  }
+  window.renderAt = renderAt;
+  window.__ready = true;
+  window.__capture = false;
+
+  var start = null;
+  function loop(ts) {
+    if (window.__capture) { requestAnimationFrame(loop); return; }
+    if (start === null) start = ts;
+    renderAt(((ts - start) / 1000) % P);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

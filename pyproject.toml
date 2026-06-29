@@ -6,7 +6,7 @@
 [project]
 name = "cogwright-rag"
 version = "0.1.0"
-description = "Local-first retrieval engine for technical equipment documentation."
+description = "Local-first retrieval engine for technical documentation."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -107,6 +107,8 @@ addopts = "-q --cov=cogwright --cov-report=term-missing"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# The banner render script under assets is throwaway tooling, not shipped code.
+extend-exclude = ["assets"]
 
 [tool.ruff.lint]
 # pyflakes, pycodestyle errors and warnings, import sorting, modernizations,
