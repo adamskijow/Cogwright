@@ -38,6 +38,13 @@ def test_no_command_prints_help_and_returns_two() -> None:
     assert main([]) == 2
 
 
+def test_version_flag_prints_and_exits(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert "cogwright" in capsys.readouterr().out
+
+
 def test_ask_without_index_reports_cleanly() -> None:
     code = main(["ask", "anything", "--index", "/no/such/index.json"])
     assert code == 1

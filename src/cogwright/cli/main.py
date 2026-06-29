@@ -69,12 +69,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("cogwright-rag")
+    except Exception:  # pragma: no cover - only when not installed as a package
+        from .. import __version__
+
+        return __version__
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cogwright",
         description=(
             "Local-first retrieval engine for technical equipment documentation."
         ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"cogwright {_version()}",
     )
     subparsers = parser.add_subparsers(dest="command")
 

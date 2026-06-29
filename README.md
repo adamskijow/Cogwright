@@ -63,7 +63,15 @@ ask:     question -> embed + detect identifiers -> hybrid retrieval
 
 ## Install
 
-Cogwright targets Python 3.12 and uses [uv](https://docs.astral.sh/uv/).
+Cogwright targets Python 3.12. It is published on PyPI as `cogwright-rag` (the
+import package and the `cogwright` command keep the shorter name):
+
+```sh
+pip install cogwright-rag          # core install
+pip install "cogwright-rag[ocr]"   # add scanned-page recognition
+```
+
+For development, use [uv](https://docs.astral.sh/uv/):
 
 ```sh
 uv sync                  # core install

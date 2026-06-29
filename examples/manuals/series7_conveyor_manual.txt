@@ -1,0 +1,38 @@
+SERIES 7 INDUSTRIAL CONVEYOR UNIT
+FIELD SERVICE MANUAL
+
+OVERVIEW
+
+The Series 7 conveyor unit moves bulk material along a fixed line. This manual
+covers routine startup, alarm and stop code reference, and replacement parts for
+field service technicians.
+
+SAFETY
+
+Always engage the main disconnect and confirm zero motion before reaching into
+the guarded area.STARTUP PROCEDURE
+
+Follow these steps in order to bring the unit online.
+
+1. Engage the main disconnect at the control cabinet.
+2. Confirm the belt guard is closed and latched.
+3. Set the speed dial to the value on the job ticket.
+4. Press the green start button and watch for smooth belt motion.
+5. Verify the run indicator is lit before leaving the station.ALARM AND STOP CODE REFERENCE
+
+Alarm 204 indicates low coolant pressure in the drive gearbox. To clear it:
+
+1. Stop the unit and allow the gearbox to cool for ten minutes.
+2. Check the coolant level and refill to the cold mark if it is low.
+3. Clear alarm 204 from the panel and restart the unit.
+
+Stop code SC-12 means the emergency stop circuit is open. Release every E-stop
+button, then reset stop code SC-12 at the main panel.
+
+Fault 09 reports a speed sensor mismatch and requires sensor replacement.REPLACEMENT PARTS
+
+| Component | Part Number | Notes |
+| --- | --- | --- |
+| Drive belt | PN 44-19A | Inspect every 500 hours |
+| Coolant pump seal kit | PN 7788-01 | Replace with gasket |
+| Speed sensor | PN 31-220 | Matches fault 09 |
