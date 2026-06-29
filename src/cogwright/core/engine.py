@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from .chunking import chunk_document, embedding_text
 from .citation import CitationMapper, strip_citation_markers
@@ -227,6 +228,47 @@ class IngestionPipeline:
         if any(lowered.endswith(ext) for ext in _DEFAULT_EXTENSIONS):
             return True
         return self._fs.exists(path) and not self._fs.list_files(path, ())
+
+
+def reembed_index(
+    index: Index,
+    embedder: Embedder,
+    embedding_model: str,
+    timestamp: str,
+    batch_size: int = 32,
+) -> Iterator[dict[str, Any]]:
+    """Regenerate every vector in an index with a different embedder.
+
+    Embeds the chunk text already stored in the index, so the source documents
+    need not still be present on disk. The caller drives it for progress and
+    swaps in the result only when it completes, which keeps the operation
+    transactional: a failure partway leaves the original index untouched.
+
+    Yields ``{"type": "progress", "done", "total"}`` as batches finish and a
+    final ``{"type": "result", "index", "total"}`` with the rebuilt index.
+    """
+
+    chunks = list(index.chunks.values())
+    total = len(chunks)
+    store = InMemoryVectorStore()
+    done = 0
+    for start in range(0, total, batch_size):
+        batch = chunks[start : start + batch_size]
+        vectors = embedder.embed([embedding_text(chunk) for chunk in batch])
+        for chunk, vector in zip(batch, vectors, strict=True):
+            store.add(chunk.chunk_id, vector)
+        done += len(batch)
+        yield {"type": "progress", "done": done, "total": total}
+
+    new_index = Index.build(chunks, store, index.metadata)
+    new_index.metadata = _refreshed_metadata(
+        new_index,
+        embedding_model,
+        index.metadata.documents,
+        timestamp,
+        created_at=index.metadata.created_at,
+    )
+    yield {"type": "result", "index": new_index, "total": total}
 
 
 @dataclass(frozen=True)

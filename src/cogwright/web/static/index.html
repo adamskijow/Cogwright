@@ -61,13 +61,8 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
   }
   input[type=number]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
   .field { margin-bottom: 18px; }
-  .field input[type=text] { width: 100%; }
+  .field > input[type=text] { width: 100%; }
   .field .help { font-size: 12px; color: var(--faint); margin-top: 6px; }
-  .readonly {
-    display: inline-block; padding: 9px 12px; background: var(--surface-2);
-    border-radius: var(--radius); font-family: ui-monospace, monospace;
-    font-size: 13px; color: var(--muted);
-  }
   .label { font-size: 12px; color: var(--faint); margin: 18px 0 8px; }
   .answer { font-size: 15px; white-space: pre-wrap; min-height: 4px; }
   .chip {
@@ -172,13 +167,18 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
       <input type="number" id="set-min" step="0.05" min="0" max="1" />
       <div class="help">Below this cosine score a question is reported as not found. The right value depends on the embedding model.</div>
     </div>
-    <div class="field">
-      <div class="label">Embedding model</div>
-      <span class="readonly" id="set-embed">unknown</span>
-      <div class="help">Baked into the index. To change it, re-ingest the corpus with the new model.</div>
-    </div>
     <button class="primary" id="save-btn" onclick="saveSettings()">Apply</button>
     <div class="status" id="settings-status"></div>
+
+    <div class="field" style="margin-top:28px;border-top:1px solid var(--border);padding-top:20px">
+      <div class="label" style="margin-top:0">Embedding model</div>
+      <div class="row">
+        <input type="text" id="set-embed" autocomplete="off" />
+        <button class="primary" id="reembed-btn" onclick="reembed()">Re-embed</button>
+      </div>
+      <div class="help">Changing this regenerates every vector in the index, in place from the stored text (one embedding call per chunk). Recalibrate min-score afterwards.</div>
+      <div class="status" id="reembed-status"></div>
+    </div>
   </section>
 </div>
 
@@ -211,7 +211,7 @@ function renderInfo(info) {
     : "Empty index.";
   $("set-llm").value = ep.llm_model || "";
   $("set-min").value = ep.min_score != null ? ep.min_score : "";
-  $("set-embed").textContent = info.embedding_model || ep.embedding_model || "unknown";
+  $("set-embed").value = info.embedding_model || ep.embedding_model || "";
   const list = $("doclist");
   if (!info.documents.length) {
     list.innerHTML = `<div class="doc"><span class="name" style="color:var(--faint)">No documents yet. Add a path above.</span></div>`;
@@ -290,6 +290,28 @@ function saveSettings() {
   const llm_model = $("set-llm").value.trim();
   const min_score = $("set-min").value;
   corpusAction("/api/settings", { method: "POST", body: JSON.stringify({ llm_model, min_score }) }, "settings-status", "Applying...");
+}
+
+let res = null;
+function reembed() {
+  const model = $("set-embed").value.trim();
+  if (!model) return;
+  if (!confirm(`Re-embed the entire corpus with "${model}"? This regenerates every vector and can take a while.`)) return;
+  if (res) res.close();
+  const s = $("reembed-status"); s.className = "status"; s.textContent = "Starting...";
+  $("reembed-btn").disabled = true;
+  res = new EventSource("/api/reembed?model=" + encodeURIComponent(model));
+  res.onmessage = (ev) => {
+    const d = JSON.parse(ev.data);
+    if (d.type === "progress") { s.textContent = `Re-embedding... ${d.done} / ${d.total} chunks`; }
+    else if (d.type === "done") {
+      res.close(); $("reembed-btn").disabled = false; renderInfo(d.info);
+      s.textContent = `Done. Re-embedded ${d.total} chunks with ${d.info.embedding_model}. Recalibrate min-score if needed.`;
+    } else if (d.type === "error") {
+      res.close(); $("reembed-btn").disabled = false; s.textContent = d.message; s.className = "status err";
+    }
+  };
+  res.onerror = () => { res.close(); $("reembed-btn").disabled = false; if (s.textContent === "Starting...") { s.textContent = "Lost connection to the server."; s.className = "status err"; } };
 }
 async function uploadFiles(files) {
   for (const f of files) {

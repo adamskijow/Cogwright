@@ -276,6 +276,22 @@ def _make_embedder(config: Config) -> HttpEmbedder:
     )
 
 
+def _embedder_factory(config: Config) -> Callable[[str], HttpEmbedder]:
+    """Build embedders on demand so the web app can re-embed with a new model."""
+
+    endpoint = config.endpoint
+
+    def make(model: str) -> HttpEmbedder:
+        return HttpEmbedder(
+            base_url=endpoint.base_url,
+            model=model,
+            api_key=endpoint.api_key,
+            timeout=endpoint.timeout_seconds,
+        )
+
+    return make
+
+
 def _make_llm(config: Config) -> HttpLLMClient:
     endpoint = config.endpoint
     return HttpLLMClient(
@@ -342,7 +358,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         config.index_path,
         fs,
         _build_parsers(args, config),
-        _make_embedder(config),
+        _embedder_factory(config),
         _llm_factory(config),
     )
     serve(app, host=args.host, port=args.port)

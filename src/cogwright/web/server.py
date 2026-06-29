@@ -11,7 +11,7 @@ default so the interface stays on the machine it runs on.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -39,6 +39,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._guarded(lambda: self._json(200, self._app.info()))
         elif route.path == "/api/ask":
             self._ask(parse_qs(route.query))
+        elif route.path == "/api/reembed":
+            self._stream(self._app.reembed_stream(self._one(route.query, "model")))
         else:
             self._json(404, {"error": "not found"})
 
@@ -75,12 +77,18 @@ class _Handler(BaseHTTPRequestHandler):
         if not question:
             self._json(400, {"error": "missing question"})
             return
+        self._stream(self._app.ask_stream(question))
+
+    def _one(self, query: str, key: str) -> str:
+        return (parse_qs(query).get(key) or [""])[0].strip()
+
+    def _stream(self, events: Iterator[dict[str, Any]]) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         try:
-            for event in self._app.ask_stream(question):
+            for event in events:
                 self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):

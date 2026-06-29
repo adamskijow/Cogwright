@@ -170,10 +170,10 @@ cogwright serve [--host 127.0.0.1] [--port 8765]
 Runs a local web interface in the browser: a search box with streaming cited
 answers and a retrieval inspector, a corpus view for adding documents (by path or
 drag-and-drop) and removing them, and a settings view that switches the chat model
-and the relevance cutoff live (the embedding model stays fixed, since it is baked
-into the index). It is a standard-library server with a bundled offline page, so
-it pulls in no web framework and serves only on the host you bind. Your documents
-and the index never leave the machine.
+and the relevance cutoff live and re-embeds the corpus to a new embedding model
+(streaming progress, since that regenerates every vector). It is a standard-library
+server with a bundled offline page, so it pulls in no web framework and serves only
+on the host you bind. Your documents and the index never leave the machine.
 
 ## Documents it understands
 

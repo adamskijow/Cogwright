@@ -28,12 +28,13 @@ ALARM = (
 
 def _app(fs: FakeFileSystem, llm: FakeLLMClient | None = None) -> WebApp:
     client = llm or FakeLLMClient()
+    embedder = FakeEmbedder()
     return WebApp(
         Config(),
         "index.json",
         fs,
         [TextDocumentParser()],
-        FakeEmbedder(),
+        lambda _model: embedder,
         lambda _model: client,
     )
 
@@ -122,7 +123,12 @@ def test_update_settings_switches_model_and_min_score() -> None:
         return FakeLLMClient()
 
     app = WebApp(
-        Config(), "index.json", fs, [TextDocumentParser()], FakeEmbedder(), factory
+        Config(),
+        "index.json",
+        fs,
+        [TextDocumentParser()],
+        lambda _model: FakeEmbedder(),
+        factory,
     )
     info = app.update_settings(llm_model="other-model", min_score=0.7)
 
@@ -136,6 +142,44 @@ def test_update_settings_clamps_min_score() -> None:
     app = _app(FakeFileSystem())
     info = app.update_settings(min_score=5.0)
     assert info["endpoint"]["min_score"] == 1.0
+
+
+def test_reembed_switches_model_and_keeps_answering() -> None:
+    fs = FakeFileSystem()
+    fs.add_text("manual.txt", ALARM)
+    built: list[str] = []
+
+    def embedder_factory(model: str) -> FakeEmbedder:
+        built.append(model)
+        return FakeEmbedder()
+
+    app = WebApp(
+        Config(),
+        "index.json",
+        fs,
+        [TextDocumentParser()],
+        embedder_factory,
+        lambda _model: FakeLLMClient(),
+    )
+    app.add_path("manual.txt")
+
+    events = list(app.reembed_stream("new-embed-model"))
+
+    assert any(e["type"] == "progress" for e in events)
+    done = events[-1]
+    assert done["type"] == "done"
+    assert done["info"]["embedding_model"] == "new-embed-model"
+    assert done["info"]["endpoint"]["embedding_model"] == "new-embed-model"
+    assert built[-1] == "new-embed-model"  # a fresh embedder built for the new model
+    # The corpus still answers; queries now embed with the new model.
+    answer = list(app.ask_stream("How do I clear alarm 204?"))[-1]
+    assert answer["answer"]["found"] is True
+
+
+def test_reembed_empty_index_is_an_error() -> None:
+    app = _app(FakeFileSystem())
+    events = list(app.reembed_stream("new-embed-model"))
+    assert events[-1]["type"] == "error"
 
 
 @pytest.fixture
@@ -178,6 +222,19 @@ def test_http_settings_endpoint(base_url: str) -> None:
         info = json.loads(response.read())
     assert info["endpoint"]["llm_model"] == "swapped"
     assert info["endpoint"]["min_score"] == 0.6
+
+
+def test_http_reembed_streams_progress(base_url: str) -> None:
+    url = base_url + "/api/reembed?model=swapped-embed"
+    events = []
+    with urllib.request.urlopen(url) as response:
+        for raw in response:
+            line = raw.decode("utf-8").strip()
+            if line.startswith("data:"):
+                events.append(json.loads(line[len("data:") :].strip()))
+    assert any(e["type"] == "progress" for e in events)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["info"]["embedding_model"] == "swapped-embed"
 
 
 def test_http_ask_streams_server_sent_events(base_url: str) -> None:

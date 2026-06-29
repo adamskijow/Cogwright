@@ -22,7 +22,7 @@ from typing import Any
 
 from ..core.citation import clean_answer_text
 from ..core.config import Config
-from ..core.engine import IngestionPipeline, QueryEngine
+from ..core.engine import IngestionPipeline, QueryEngine, reembed_index
 from ..core.index import Index, IndexMetadata
 from ..core.models import Answer
 from ..core.prompt import NOT_FOUND_MESSAGE
@@ -39,20 +39,23 @@ class WebApp:
         index_path: str,
         fs: FileSystem,
         parsers: Sequence[DocumentParser],
-        embedder: Embedder,
+        embedder_factory: Callable[[str], Embedder],
         llm_factory: Callable[[str], LLMClient],
     ) -> None:
         self._config = config
         self._index_path = index_path
         self._fs = fs
-        self._embedder = embedder
+        self._parsers = parsers
         self._embedding_model = config.endpoint.embedding_model
-        # The chat client is built from a factory so the model can be switched at
-        # runtime; the embedder is fixed because its model is baked into the index.
+        # Both clients are built from factories so the models can be switched at
+        # runtime. Switching the chat model is immediate; switching the embedding
+        # model re-embeds the corpus, since its vectors are baked into the index.
+        self._embedder_factory = embedder_factory
         self._llm_factory = llm_factory
-        self._pipeline = IngestionPipeline(fs, parsers, embedder, config)
+        self._embedder = embedder_factory(self._embedding_model)
         self._llm = llm_factory(config.endpoint.llm_model)
-        self._engine = QueryEngine(embedder, self._llm, config)
+        self._pipeline = IngestionPipeline(fs, parsers, self._embedder, config)
+        self._engine = QueryEngine(self._embedder, self._llm, config)
         self._lock = threading.Lock()
         self._index = self._load_index()
 
@@ -61,8 +64,8 @@ class WebApp:
     ) -> dict[str, Any]:
         """Switch the chat model or relevance cutoff live, then return the info.
 
-        The embedding model is deliberately not switchable here: its vectors are
-        baked into the index, so changing it means re-ingesting the corpus.
+        The embedding model is not switched here, because its vectors are baked
+        into the index; :meth:`reembed_stream` changes it by re-embedding.
         """
 
         with self._lock:
@@ -78,6 +81,61 @@ class WebApp:
             )
             self._engine = QueryEngine(self._embedder, self._llm, self._config)
         return self.info()
+
+    def reembed_stream(self, embedding_model: str) -> Iterator[dict[str, Any]]:
+        """Re-embed the whole corpus with a new model, streaming progress.
+
+        The new index is built alongside the current one and swapped in only on
+        success, so a failure partway (an unreachable endpoint, say) leaves the
+        existing index and its query path intact. After the swap, queries embed
+        with the new model too.
+        """
+
+        from ..core.errors import ModelUnavailableError
+
+        model = (embedding_model or "").strip()
+        if not model:
+            yield {"type": "error", "message": "missing embedding model"}
+            return
+        with self._lock:
+            index = self._index
+        if not index.chunks:
+            yield {"type": "error", "message": "the index is empty; ingest documents first"}
+            return
+
+        embedder = self._embedder_factory(model)
+        new_index: Index | None = None
+        try:
+            for event in reembed_index(index, embedder, model, _now()):
+                if event["type"] == "progress":
+                    yield {
+                        "type": "progress",
+                        "done": event["done"],
+                        "total": event["total"],
+                    }
+                else:
+                    new_index = event["index"]
+        except ModelUnavailableError as exc:
+            yield {"type": "error", "message": str(exc)}
+            return
+        if new_index is None:
+            yield {"type": "error", "message": "re-embedding produced no index"}
+            return
+
+        with self._lock:
+            self._index = new_index
+            self._embedder = embedder
+            self._embedding_model = model
+            self._config = replace(
+                self._config,
+                endpoint=replace(self._config.endpoint, embedding_model=model),
+            )
+            self._pipeline = IngestionPipeline(
+                self._fs, self._parsers, embedder, self._config
+            )
+            self._engine = QueryEngine(embedder, self._llm, self._config)
+            self._persist()
+        yield {"type": "done", "total": len(new_index.chunks), "info": self.info()}
 
     def info(self) -> dict[str, Any]:
         """A JSON-ready description of the index and the active settings."""
