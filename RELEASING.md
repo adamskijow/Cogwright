@@ -5,17 +5,21 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
 
 # Releasing
 
-Cogwright is distributed on PyPI as `cogwright-rag` (the `cogwright` name was
-already taken). The import package and the CLI command stay `cogwright`.
+Cogwright is distributed on PyPI as
+[`cogwright-rag`](https://pypi.org/project/cogwright-rag/) (the `cogwright` name
+was already taken). The import package and the CLI command stay `cogwright`.
+Version `0.1.0` was published, so the project already exists on PyPI.
 
 ## One-time PyPI setup
 
 Releases use [trusted publishing](https://docs.pypi.org/trusted-publishers/), so
-no API token is stored in the repository. Once, on PyPI:
+no API token is stored in the repository. Once, on the existing `cogwright-rag`
+project on PyPI, add a trusted publisher pointing at this repository, the
+`release.yml` workflow, and the `pypi` environment.
 
-1. Register (or claim) the project `cogwright-rag`.
-2. Add a trusted publisher pointing at this repository, the `release.yml`
-   workflow, and the `pypi` environment.
+If you would rather use a token, add it as a repository secret named
+`PYPI_API_TOKEN` (a project-scoped token is enough now that the project exists)
+and set the publish step's `password` to `${{ secrets.PYPI_API_TOKEN }}`.
 
 ## Cutting a release
 

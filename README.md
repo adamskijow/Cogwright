@@ -5,6 +5,9 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
 
 # Cogwright
 
+[![PyPI](https://img.shields.io/pypi/v/cogwright-rag)](https://pypi.org/project/cogwright-rag/)
+[![CI](https://github.com/adamskijow/Cogwright/actions/workflows/ci.yml/badge.svg)](https://github.com/adamskijow/Cogwright/actions/workflows/ci.yml)
+
 Cogwright answers questions about technical equipment documentation. Point it at
 a folder of manuals, service bulletins, and parts lists, ask in plain language,
 and get a step-by-step answer grounded only in those documents, with citations to
