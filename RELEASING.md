@@ -38,15 +38,19 @@ and set the publish step's `password` to `${{ secrets.PYPI_API_TOKEN }}`.
    uvx twine check dist/*
    ```
 
-4. Commit, then tag and push:
+4. Commit, then tag and push (match the tag to the version):
 
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
 
-Pushing the tag runs `release.yml`, which builds, checks, and publishes to PyPI.
-A published version cannot be replaced, so verify the build before tagging.
+Pushing the tag runs `release.yml`, which builds, checks, creates a GitHub
+Release with the built artifacts, and publishes to PyPI. A version already on
+PyPI is skipped rather than failed, so the workflow is safe to re-run and a
+version published by hand (with `uv publish`) still gets a clean GitHub Release
+when its tag is pushed. A published version cannot be replaced, so verify the
+build before tagging.
 
 ## Verifying an install
 

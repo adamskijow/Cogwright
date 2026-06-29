@@ -5,7 +5,7 @@
 # the import package and the CLI command are still "cogwright".
 [project]
 name = "cogwright-rag"
-version = "0.1.1"
+version = "0.2.0"
 description = "Local-first retrieval engine for technical documentation."
 readme = "README.md"
 requires-python = ">=3.12"

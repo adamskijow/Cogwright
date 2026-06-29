@@ -2,19 +2,25 @@
 # SPDX-FileCopyrightText: 2026 The Cogwright Authors
 name: Release
 
-# Publishes to PyPI when a version tag is pushed. Uses PyPI trusted publishing
-# (OIDC), so no API token is stored in the repository. This requires a one-time
-# setup on PyPI: register the "cogwright-rag" project with this repository, the
-# "release.yml" workflow, and the "pypi" environment as a trusted publisher. See
-# RELEASING.md.
+# On a version tag: build, create a GitHub Release with the artifacts, and
+# publish to PyPI. Publishing uses PyPI trusted publishing (OIDC), so no API
+# token is stored in the repository; this needs a one-time setup on PyPI (see
+# RELEASING.md). A version already present on PyPI is skipped rather than failed,
+# so a tag can be (re)pushed safely and a version published by hand still gets a
+# clean GitHub Release.
 on:
   push:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # to create the GitHub Release
     steps:
       - uses: actions/checkout@v7
 
@@ -34,6 +40,17 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -46,5 +63,19 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Skip if this version is already on PyPI
+        id: pypi
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if curl -sfL "https://pypi.org/pypi/cogwright-rag/${version}/json" -o /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${version} is already on PyPI; skipping publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to PyPI
+        if: steps.pypi.outputs.exists == 'false'
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
