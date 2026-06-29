@@ -28,3 +28,10 @@ ffmpeg -y -framerate 30 -i frames/f%04d.png -i /tmp/pal.png \
 
 The frames are rendered deterministically over one loop period, so the GIF and
 MP4 loop seamlessly.
+
+## Social preview
+
+`social-preview.png` is the repository social card (1280x640), rendered from
+`social.html`. It is uploaded by hand under the repository's Settings, since the
+GitHub API does not expose the social preview image. To regenerate it, open
+`social.html` and screenshot the `#card` element at a 1280x640 viewport.

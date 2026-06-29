@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!--
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: 2026 The Cogwright Authors
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; }
+  #card {
+    width: 1280px; height: 640px; position: relative; overflow: hidden;
+    background:
+      radial-gradient(900px 520px at 78% 18%, rgba(95,230,207,0.16), transparent 60%),
+      radial-gradient(700px 600px at 12% 100%, rgba(44,58,85,0.55), transparent 65%),
+      linear-gradient(140deg, #0b1220 0%, #0d1830 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #e8eefc;
+    padding: 84px 88px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .brand { display: flex; align-items: center; gap: 18px; margin-bottom: 30px; }
+  .brand svg { color: #5fe6cf; }
+  .brand .name { font-size: 40px; font-weight: 600; letter-spacing: -0.5px; }
+  h1 {
+    font-size: 60px; line-height: 1.1; font-weight: 600; letter-spacing: -1.2px;
+    max-width: 980px; margin-bottom: 26px;
+  }
+  h1 .hl { color: #5fe6cf; }
+  .tags { display: flex; gap: 12px; margin-bottom: 40px; }
+  .tag {
+    font-size: 20px; color: #b8c6e6; background: rgba(124,153,209,0.13);
+    border: 1px solid rgba(124,153,209,0.22); border-radius: 999px; padding: 7px 20px;
+  }
+  .pip {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 26px;
+    color: #9fb2d8;
+  }
+  .pip .sym { color: #5fe6cf; }
+  .edge { position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: #5fe6cf; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div class="edge"></div>
+  <div class="brand">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    <span class="name">Cogwright</span>
+  </div>
+  <h1>Grounded, <span class="hl">cited</span> answers from your documents.</h1>
+  <div class="tags">
+    <span class="tag">local-first</span>
+    <span class="tag">fully offline</span>
+    <span class="tag">cited to the page</span>
+  </div>
+  <div class="pip"><span class="sym">$</span> pip install cogwright-rag</div>
+</div>
+</body>
+</html>
