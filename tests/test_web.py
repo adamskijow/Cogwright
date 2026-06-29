@@ -27,13 +27,14 @@ ALARM = (
 
 
 def _app(fs: FakeFileSystem, llm: FakeLLMClient | None = None) -> WebApp:
+    client = llm or FakeLLMClient()
     return WebApp(
         Config(),
         "index.json",
         fs,
         [TextDocumentParser()],
         FakeEmbedder(),
-        llm or FakeLLMClient(),
+        lambda _model: client,
     )
 
 
@@ -111,6 +112,32 @@ def test_upload_writes_bytes_then_indexes() -> None:
     assert any("uploads/parts.txt" in d["source_path"] for d in info["documents"])
 
 
+def test_update_settings_switches_model_and_min_score() -> None:
+    fs = FakeFileSystem()
+    fs.add_text("manual.txt", ALARM)
+    built: list[str] = []
+
+    def factory(model: str) -> FakeLLMClient:
+        built.append(model)
+        return FakeLLMClient()
+
+    app = WebApp(
+        Config(), "index.json", fs, [TextDocumentParser()], FakeEmbedder(), factory
+    )
+    info = app.update_settings(llm_model="other-model", min_score=0.7)
+
+    assert info["endpoint"]["llm_model"] == "other-model"
+    assert info["endpoint"]["min_score"] == 0.7
+    # A fresh chat client was built for the new model (built once at startup too).
+    assert built[-1] == "other-model"
+
+
+def test_update_settings_clamps_min_score() -> None:
+    app = _app(FakeFileSystem())
+    info = app.update_settings(min_score=5.0)
+    assert info["endpoint"]["min_score"] == 1.0
+
+
 @pytest.fixture
 def base_url() -> Iterator[str]:
     fs = FakeFileSystem()
@@ -140,6 +167,17 @@ def test_http_info_endpoint(base_url: str) -> None:
     with urllib.request.urlopen(base_url + "/api/info") as response:
         info = json.loads(response.read())
     assert info["document_count"] == 1
+
+
+def test_http_settings_endpoint(base_url: str) -> None:
+    body = json.dumps({"llm_model": "swapped", "min_score": 0.6}).encode()
+    request = urllib.request.Request(
+        base_url + "/api/settings", data=body, method="POST"
+    )
+    with urllib.request.urlopen(request) as response:
+        info = json.loads(response.read())
+    assert info["endpoint"]["llm_model"] == "swapped"
+    assert info["endpoint"]["min_score"] == 0.6
 
 
 def test_http_ask_streams_server_sent_events(base_url: str) -> None:

@@ -16,7 +16,7 @@ import dataclasses
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
 from ..adapters.filesystem import RealFileSystem
@@ -286,6 +286,22 @@ def _make_llm(config: Config) -> HttpLLMClient:
     )
 
 
+def _llm_factory(config: Config) -> Callable[[str], HttpLLMClient]:
+    """Build chat clients on demand so the web app can switch models at runtime."""
+
+    endpoint = config.endpoint
+
+    def make(model: str) -> HttpLLMClient:
+        return HttpLLMClient(
+            base_url=endpoint.base_url,
+            model=model,
+            api_key=endpoint.api_key,
+            timeout=endpoint.timeout_seconds,
+        )
+
+    return make
+
+
 def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -327,7 +343,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         fs,
         _build_parsers(args, config),
         _make_embedder(config),
-        _make_llm(config),
+        _llm_factory(config),
     )
     serve(app, host=args.host, port=args.port)
     return 0

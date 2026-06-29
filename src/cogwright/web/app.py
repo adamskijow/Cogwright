@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import os
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -39,17 +40,44 @@ class WebApp:
         fs: FileSystem,
         parsers: Sequence[DocumentParser],
         embedder: Embedder,
-        llm: LLMClient,
+        llm_factory: Callable[[str], LLMClient],
     ) -> None:
         self._config = config
         self._index_path = index_path
         self._fs = fs
+        self._embedder = embedder
         self._embedding_model = config.endpoint.embedding_model
+        # The chat client is built from a factory so the model can be switched at
+        # runtime; the embedder is fixed because its model is baked into the index.
+        self._llm_factory = llm_factory
         self._pipeline = IngestionPipeline(fs, parsers, embedder, config)
-        self._engine = QueryEngine(embedder, llm, config)
-        self._llm = llm
+        self._llm = llm_factory(config.endpoint.llm_model)
+        self._engine = QueryEngine(embedder, self._llm, config)
         self._lock = threading.Lock()
         self._index = self._load_index()
+
+    def update_settings(
+        self, llm_model: str | None = None, min_score: float | None = None
+    ) -> dict[str, Any]:
+        """Switch the chat model or relevance cutoff live, then return the info.
+
+        The embedding model is deliberately not switchable here: its vectors are
+        baked into the index, so changing it means re-ingesting the corpus.
+        """
+
+        with self._lock:
+            endpoint = self._config.endpoint
+            retrieval = self._config.retrieval
+            if llm_model and llm_model != endpoint.llm_model:
+                endpoint = replace(endpoint, llm_model=llm_model)
+                self._llm = self._llm_factory(llm_model)
+            if min_score is not None:
+                retrieval = replace(retrieval, min_score=max(0.0, min(1.0, min_score)))
+            self._config = replace(
+                self._config, endpoint=endpoint, retrieval=retrieval
+            )
+            self._engine = QueryEngine(self._embedder, self._llm, self._config)
+        return self.info()
 
     def info(self) -> dict[str, Any]:
         """A JSON-ready description of the index and the active settings."""
@@ -89,9 +117,11 @@ class WebApp:
 
         with self._lock:
             index = self._index
+            engine = self._engine
+            llm = self._llm
 
         try:
-            prep = self._engine.prepare(index, question)
+            prep = engine.prepare(index, question)
         except ModelUnavailableError as exc:
             yield {"type": "error", "message": str(exc)}
             return
@@ -102,14 +132,14 @@ class WebApp:
 
         pieces: list[str] = []
         try:
-            for token in self._llm.stream(prep.messages):
+            for token in llm.stream(prep.messages):
                 pieces.append(token)
                 yield {"type": "token", "text": token}
         except ModelUnavailableError as exc:
             yield {"type": "error", "message": str(exc)}
             return
 
-        answer = self._engine.assemble(prep, "".join(pieces))
+        answer = engine.assemble(prep, "".join(pieces))
         yield {"type": "done", "answer": self._serialize_answer(answer)}
 
     def add_path(self, path: str) -> dict[str, Any]:

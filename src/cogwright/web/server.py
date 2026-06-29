@@ -56,6 +56,17 @@ class _Handler(BaseHTTPRequestHandler):
         elif route.path == "/api/upload":
             name = (parse_qs(urlparse(self.path).query).get("filename") or ["upload"])[0]
             self._guarded(lambda: self._json(200, self._app.add_upload(name, body)))
+        elif route.path == "/api/settings":
+            payload = _load_json(body)
+            self._guarded(
+                lambda: self._json(
+                    200,
+                    self._app.update_settings(
+                        llm_model=(payload.get("llm_model") or None),
+                        min_score=_opt_float(payload.get("min_score")),
+                    ),
+                )
+            )
         else:
             self._json(404, {"error": "not found"})
 
@@ -82,7 +93,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(502, {"error": str(exc)})
         except CogwrightError as exc:
             self._json(400, {"error": str(exc)})
-        except (KeyError, json.JSONDecodeError):
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
             self._json(400, {"error": "malformed request"})
 
     def _json(self, status: int, body: dict[str, Any]) -> None:
@@ -105,6 +116,12 @@ class _Handler(BaseHTTPRequestHandler):
 def _load_json(body: bytes) -> dict[str, Any]:
     parsed: dict[str, Any] = json.loads(body or b"{}")
     return parsed
+
+
+def _opt_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
 
 
 def serve(app: WebApp, host: str = "127.0.0.1", port: int = 8765) -> None:

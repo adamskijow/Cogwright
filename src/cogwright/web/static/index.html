@@ -54,6 +54,20 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
     background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
   }
   button.primary:disabled { opacity: 0.5; cursor: default; }
+  input[type=number] {
+    width: 130px; height: 40px; padding: 0 12px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); outline: none;
+  }
+  input[type=number]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  .field { margin-bottom: 18px; }
+  .field input[type=text] { width: 100%; }
+  .field .help { font-size: 12px; color: var(--faint); margin-top: 6px; }
+  .readonly {
+    display: inline-block; padding: 9px 12px; background: var(--surface-2);
+    border-radius: var(--radius); font-family: ui-monospace, monospace;
+    font-size: 13px; color: var(--muted);
+  }
   .label { font-size: 12px; color: var(--faint); margin: 18px 0 8px; }
   .answer { font-size: 15px; white-space: pre-wrap; min-height: 4px; }
   .chip {
@@ -105,6 +119,7 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
     <nav>
       <button id="nav-ask" class="active" onclick="show('ask')">Ask</button>
       <button id="nav-corpus" onclick="show('corpus')">Corpus</button>
+      <button id="nav-settings" onclick="show('settings')">Settings</button>
     </nav>
   </header>
   <p class="meta" id="meta">Loading index...</p>
@@ -144,6 +159,27 @@ SPDX-FileCopyrightText: 2026 The Cogwright Authors
     <p class="meta" id="corpus-meta" style="margin-top:14px"></p>
     <div class="status" id="corpus-status"></div>
   </section>
+
+  <section id="settings-view" class="hidden">
+    <h2 class="sr-only" style="position:absolute;left:-9999px">Settings</h2>
+    <div class="field">
+      <div class="label" style="margin-top:0">Chat model</div>
+      <input type="text" id="set-llm" autocomplete="off" />
+      <div class="help">The model that writes the answer. Change it freely; it does not touch the index.</div>
+    </div>
+    <div class="field">
+      <div class="label">Minimum relevance score</div>
+      <input type="number" id="set-min" step="0.05" min="0" max="1" />
+      <div class="help">Below this cosine score a question is reported as not found. The right value depends on the embedding model.</div>
+    </div>
+    <div class="field">
+      <div class="label">Embedding model</div>
+      <span class="readonly" id="set-embed">unknown</span>
+      <div class="help">Baked into the index. To change it, re-ingest the corpus with the new model.</div>
+    </div>
+    <button class="primary" id="save-btn" onclick="saveSettings()">Apply</button>
+    <div class="status" id="settings-status"></div>
+  </section>
 </div>
 
 <script>
@@ -151,10 +187,10 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])));
 
 function show(view) {
-  $("ask-view").classList.toggle("hidden", view !== "ask");
-  $("corpus-view").classList.toggle("hidden", view !== "corpus");
-  $("nav-ask").classList.toggle("active", view === "ask");
-  $("nav-corpus").classList.toggle("active", view === "corpus");
+  for (const v of ["ask", "corpus", "settings"]) {
+    $(v + "-view").classList.toggle("hidden", view !== v);
+    $("nav-" + v).classList.toggle("active", view === v);
+  }
 }
 
 async function loadInfo() {
@@ -168,11 +204,14 @@ function renderInfo(info) {
   const ep = info.endpoint || {};
   $("meta").textContent =
     `${info.document_count} document(s) · ${info.chunk_count} chunk(s) · ` +
-    `${info.embedding_model || "unknown model"} · min-score ${ep.min_score}`;
+    `chat ${ep.llm_model || "?"} · embed ${info.embedding_model || "?"} · min-score ${ep.min_score}`;
   $("corpus-count").textContent = `${info.document_count} document(s) · ${info.chunk_count} chunk(s)`;
   $("corpus-meta").textContent = info.embedding_model
     ? `${info.embedding_model} · ${info.vector_dim || "?"}-dim · built ${info.created_at || "?"}`
     : "Empty index.";
+  $("set-llm").value = ep.llm_model || "";
+  $("set-min").value = ep.min_score != null ? ep.min_score : "";
+  $("set-embed").textContent = info.embedding_model || ep.embedding_model || "unknown";
   const list = $("doclist");
   if (!info.documents.length) {
     list.innerHTML = `<div class="doc"><span class="name" style="color:var(--faint)">No documents yet. Add a path above.</span></div>`;
@@ -246,6 +285,11 @@ function addPath() {
 }
 function removeDoc(source_path) {
   corpusAction("/api/remove", { method: "POST", body: JSON.stringify({ source_path }) }, "corpus-status", "Removing...");
+}
+function saveSettings() {
+  const llm_model = $("set-llm").value.trim();
+  const min_score = $("set-min").value;
+  corpusAction("/api/settings", { method: "POST", body: JSON.stringify({ llm_model, min_score }) }, "settings-status", "Applying...");
 }
 async function uploadFiles(files) {
   for (const f of files) {
