@@ -26,6 +26,13 @@ class RealFileSystem:
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(data)
 
+    def write_bytes(self, path: str, data: bytes) -> None:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(data)
+
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
 

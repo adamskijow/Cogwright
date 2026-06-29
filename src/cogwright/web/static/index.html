@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<!--
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: 2026 The Cogwright Authors
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cogwright</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f1f1ee;
+    --text: #1f1f1d; --muted: #6b6b66; --faint: #94948e;
+    --border: #e3e3df; --border-strong: #cfcfca;
+    --accent: #2f6fed; --accent-bg: #e8f0fe; --accent-text: #1a4fb8;
+    --pro-bg: #efedfd; --pro-text: #4a3f9e; --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18; --surface: #242422; --surface-2: #2d2d2a;
+      --text: #ececea; --muted: #a3a39d; --faint: #75756f;
+      --border: #34342f; --border-strong: #44443e;
+      --accent: #5b8def; --accent-bg: #1d2b46; --accent-text: #9cc0ff;
+      --pro-bg: #272348; --pro-text: #b9aefc;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6; font-size: 15px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 20px 18px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 500; }
+  .brand svg { color: var(--accent); }
+  nav { display: flex; gap: 4px; }
+  nav button {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font: inherit; padding: 6px 12px; border-radius: var(--radius);
+  }
+  nav button.active { background: var(--surface-2); color: var(--text); }
+  .meta { font-size: 12px; color: var(--faint); margin: 0 0 18px; }
+  .row { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1; height: 40px; padding: 0 12px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); outline: none;
+  }
+  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  button.primary {
+    height: 40px; padding: 0 18px; font: inherit; font-weight: 500; cursor: pointer;
+    background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+  }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  .label { font-size: 12px; color: var(--faint); margin: 18px 0 8px; }
+  .answer { font-size: 15px; white-space: pre-wrap; min-height: 4px; }
+  .chip {
+    display: inline-flex; align-items: center; font-size: 13px; font-weight: 500;
+    background: var(--accent-bg); color: var(--accent-text);
+    border-radius: 999px; padding: 3px 11px; font-family: ui-monospace, monospace;
+  }
+  .src {
+    display: flex; align-items: center; gap: 12px; background: var(--surface-2);
+    border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px;
+  }
+  .src .name { font-weight: 500; font-size: 14px; }
+  .src .loc { font-size: 12px; color: var(--faint); }
+  details { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 12px; }
+  summary { font-size: 12px; color: var(--faint); cursor: pointer; }
+  .ret { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 4px 0; }
+  .ret code { color: var(--faint); width: 88px; }
+  .badge { font-size: 11px; font-weight: 500; border-radius: 5px; padding: 2px 7px; }
+  .badge.hybrid, .badge.code { background: var(--pro-bg); color: var(--pro-text); }
+  .badge.semantic { background: var(--surface-2); color: var(--muted); }
+  .ret .sec { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ret .score { font-family: ui-monospace, monospace; color: var(--muted); }
+  .drop {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    border: 1px dashed var(--border-strong); border-radius: var(--radius);
+    padding: 16px; color: var(--faint); font-size: 13px; margin: 10px 0 22px;
+  }
+  .drop.over { border-color: var(--accent); color: var(--accent-text); background: var(--accent-bg); }
+  .doclist { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .doc { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-top: 1px solid var(--border); }
+  .doc:first-child { border-top: none; }
+  .doc .name { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc .count { font-size: 12px; color: var(--faint); font-family: ui-monospace, monospace; }
+  .doc .rm { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+  .doc .rm:hover { color: #d24a4a; }
+  .status { font-size: 13px; color: var(--muted); min-height: 18px; margin-top: 10px; }
+  .status.err { color: #d24a4a; }
+  .hidden { display: none; }
+  h2 { font-size: 16px; font-weight: 500; margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      Cogwright
+    </div>
+    <nav>
+      <button id="nav-ask" class="active" onclick="show('ask')">Ask</button>
+      <button id="nav-corpus" onclick="show('corpus')">Corpus</button>
+    </nav>
+  </header>
+  <p class="meta" id="meta">Loading index...</p>
+
+  <section id="ask-view">
+    <h2 class="sr-only" style="position:absolute;left:-9999px">Ask a question</h2>
+    <div class="row">
+      <input type="text" id="q" placeholder="How do I clear alarm 204?" autocomplete="off" />
+      <button class="primary" id="ask-btn" onclick="ask()">Ask</button>
+    </div>
+    <div id="result" class="hidden">
+      <div class="label">Answer</div>
+      <div class="answer" id="answer"></div>
+      <div id="codes" style="margin-top:12px"></div>
+      <div id="sources"></div>
+      <details id="inspector" class="hidden">
+        <summary>Retrieved passages</summary>
+        <div id="retrieved" style="margin-top:8px"></div>
+      </details>
+    </div>
+    <div class="status" id="ask-status"></div>
+  </section>
+
+  <section id="corpus-view" class="hidden">
+    <h2 class="sr-only" style="position:absolute;left:-9999px">Manage the corpus</h2>
+    <div class="label">Add documents</div>
+    <div class="row">
+      <input type="text" id="path" placeholder="/path/to/your/manuals" autocomplete="off" />
+      <button class="primary" id="add-btn" onclick="addPath()">Add to index</button>
+    </div>
+    <div class="drop" id="drop">or drop files here</div>
+    <input type="file" id="file" class="hidden" multiple />
+    <div class="label" style="display:flex;justify-content:space-between">
+      <span>In this index</span><span id="corpus-count"></span>
+    </div>
+    <div class="doclist" id="doclist"></div>
+    <p class="meta" id="corpus-meta" style="margin-top:14px"></p>
+    <div class="status" id="corpus-status"></div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])));
+
+function show(view) {
+  $("ask-view").classList.toggle("hidden", view !== "ask");
+  $("corpus-view").classList.toggle("hidden", view !== "corpus");
+  $("nav-ask").classList.toggle("active", view === "ask");
+  $("nav-corpus").classList.toggle("active", view === "corpus");
+}
+
+async function loadInfo() {
+  try {
+    const r = await fetch("/api/info");
+    renderInfo(await r.json());
+  } catch (e) { $("meta").textContent = "Could not reach the server."; }
+}
+
+function renderInfo(info) {
+  const ep = info.endpoint || {};
+  $("meta").textContent =
+    `${info.document_count} document(s) · ${info.chunk_count} chunk(s) · ` +
+    `${info.embedding_model || "unknown model"} · min-score ${ep.min_score}`;
+  $("corpus-count").textContent = `${info.document_count} document(s) · ${info.chunk_count} chunk(s)`;
+  $("corpus-meta").textContent = info.embedding_model
+    ? `${info.embedding_model} · ${info.vector_dim || "?"}-dim · built ${info.created_at || "?"}`
+    : "Empty index.";
+  const list = $("doclist");
+  if (!info.documents.length) {
+    list.innerHTML = `<div class="doc"><span class="name" style="color:var(--faint)">No documents yet. Add a path above.</span></div>`;
+    return;
+  }
+  list.innerHTML = info.documents.map(d => `
+    <div class="doc">
+      <span class="name" title="${esc(d.source_path)}">${esc(d.title || d.source_path)}</span>
+      <span class="count">${d.chunk_count} chunks</span>
+      <button class="rm" title="Remove" aria-label="Remove ${esc(d.title)}" onclick="removeDoc('${esc(d.source_path)}')">×</button>
+    </div>`).join("");
+}
+
+let es = null;
+function ask() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  if (es) es.close();
+  $("result").classList.remove("hidden");
+  $("answer").textContent = "";
+  $("codes").innerHTML = ""; $("sources").innerHTML = "";
+  $("inspector").classList.add("hidden");
+  $("ask-status").textContent = "Thinking..."; $("ask-status").className = "status";
+  $("ask-btn").disabled = true;
+  let streamed = "";
+  es = new EventSource("/api/ask?q=" + encodeURIComponent(q));
+  es.onmessage = (ev) => {
+    const d = JSON.parse(ev.data);
+    if (d.type === "token") { streamed += d.text; $("answer").textContent = streamed; $("ask-status").textContent = ""; }
+    else if (d.type === "done") { es.close(); $("ask-btn").disabled = false; renderAnswer(d.answer); }
+    else if (d.type === "error") { es.close(); $("ask-btn").disabled = false; $("ask-status").textContent = d.message; $("ask-status").className = "status err"; }
+  };
+  es.onerror = () => { es.close(); $("ask-btn").disabled = false; if (!streamed) { $("ask-status").textContent = "Lost connection to the server."; $("ask-status").className = "status err"; } };
+}
+
+function renderAnswer(a) {
+  $("answer").textContent = a.text || "";
+  $("codes").innerHTML = (a.codes || []).map(c => `<span class="chip">${esc(c)}</span>`).join(" ");
+  if (a.found && a.citations && a.citations.length) {
+    $("sources").innerHTML = `<div class="label">Sources</div>` + a.citations.map(c => `
+      <div class="src"><div style="flex:1;min-width:0">
+        <div class="name">${esc(c.source_path.split("/").pop())}</div>
+        <div class="loc">page ${c.page}${c.section ? " · " + esc(c.section.toLowerCase()) : ""}</div>
+      </div></div>`).join("");
+  } else { $("sources").innerHTML = ""; }
+  const ret = a.retrieved || [];
+  if (ret.length) {
+    $("inspector").classList.remove("hidden");
+    $("retrieved").innerHTML = ret.map(r => `
+      <div class="ret"><code>${esc(r.chunk_id.slice(0,8))}</code>
+        <span class="badge ${esc(r.match_type)}">${esc(r.match_type)}</span>
+        <span class="sec">${r.section ? esc(r.section.toLowerCase()) : "p" + r.page}</span>
+        <span class="score">${Number(r.score).toFixed(2)}</span></div>`).join("");
+  }
+}
+
+async function corpusAction(url, opts, statusEl, busy) {
+  const s = $(statusEl); s.className = "status"; s.textContent = busy;
+  try {
+    const r = await fetch(url, opts);
+    const data = await r.json();
+    if (!r.ok) { s.textContent = data.error || "Request failed."; s.className = "status err"; return; }
+    renderInfo(data); s.textContent = "Done.";
+  } catch (e) { s.textContent = "Could not reach the server."; s.className = "status err"; }
+}
+
+function addPath() {
+  const path = $("path").value.trim();
+  if (!path) return;
+  corpusAction("/api/ingest", { method: "POST", body: JSON.stringify({ path }) }, "corpus-status", "Indexing " + path + " ...");
+}
+function removeDoc(source_path) {
+  corpusAction("/api/remove", { method: "POST", body: JSON.stringify({ source_path }) }, "corpus-status", "Removing...");
+}
+async function uploadFiles(files) {
+  for (const f of files) {
+    const buf = await f.arrayBuffer();
+    await corpusAction("/api/upload?filename=" + encodeURIComponent(f.name), { method: "POST", body: buf }, "corpus-status", "Uploading " + f.name + " ...");
+  }
+}
+
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => uploadFiles(e.target.files));
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+$("path").addEventListener("keydown", (e) => { if (e.key === "Enter") addPath(); });
+loadInfo();
+</script>
+</body>
+</html>

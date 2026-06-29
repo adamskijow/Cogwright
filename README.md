@@ -154,6 +154,18 @@ cogwright eval <dataset.json> [--min-score S]
 Scores retrieval against a graded dataset without calling the chat model. See
 [calibrating relevance](#calibrating-relevance).
 
+### serve
+
+```sh
+cogwright serve [--host 127.0.0.1] [--port 8765]
+```
+
+Runs a local web interface in the browser: a search box with streaming cited
+answers and a retrieval inspector, plus a corpus view for adding documents (by
+path or drag-and-drop) and removing them. It is a standard-library server with a
+bundled offline page, so it pulls in no web framework and serves only on the host
+you bind. Your documents and the index never leave the machine.
+
 ## Documents it understands
 
 - **Text and Markdown** (`.txt`, `.text`, `.md`, `.markdown`). Headings, numbered

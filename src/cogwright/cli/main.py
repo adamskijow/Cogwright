@@ -55,6 +55,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_ask(args)
         if args.command == "eval":
             return _cmd_eval(args)
+        if args.command == "serve":
+            return _cmd_serve(args)
     except ModelUnavailableError as exc:
         print(f"error: {exc}", file=sys.stderr)
         print(
@@ -113,6 +115,35 @@ def _build_parser() -> argparse.ArgumentParser:
 
     info = subparsers.add_parser("info", help="show what an index contains")
     _add_common_args(info)
+
+    serve_cmd = subparsers.add_parser(
+        "serve", help="run the local web interface in the browser"
+    )
+    _add_common_args(serve_cmd)
+    serve_cmd.add_argument(
+        "--embedding-model",
+        default=os.environ.get("COGWRIGHT_EMBEDDING_MODEL"),
+        help="embedding model name served by the endpoint",
+    )
+    serve_cmd.add_argument(
+        "--llm-model",
+        default=os.environ.get("COGWRIGHT_LLM_MODEL"),
+        help="chat model name served by the endpoint",
+    )
+    serve_cmd.add_argument(
+        "--vision-model",
+        default=os.environ.get("COGWRIGHT_VISION_MODEL"),
+        help="multimodal model name for diagram analysis",
+    )
+    serve_cmd.add_argument(
+        "--min-score", type=float, default=None, help="minimum cosine score"
+    )
+    serve_cmd.add_argument("--host", default="127.0.0.1", help="host to bind")
+    serve_cmd.add_argument("--port", type=int, default=8765, help="port to bind")
+    serve_cmd.add_argument("--ocr", action="store_true", help="enable scanned-page OCR")
+    serve_cmd.add_argument(
+        "--diagrams", action="store_true", help="enable diagram transcription"
+    )
 
     ask = subparsers.add_parser(
         "ask", help="ask a question and get a grounded, cited answer"
@@ -259,9 +290,9 @@ def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _ingest_pipeline(
-    args: argparse.Namespace, config: Config, fs: RealFileSystem
-) -> IngestionPipeline:
+def _build_parsers(
+    args: argparse.Namespace, config: Config
+) -> list[DocumentParser]:
     ocr_engine = PytesseractOcrEngine() if args.ocr else None
     diagram_analyzer = (
         VisionDiagramAnalyzer(
@@ -273,11 +304,33 @@ def _ingest_pipeline(
         if args.diagrams
         else None
     )
-    parsers: list[DocumentParser] = [
+    return [
         TextDocumentParser(),
         PdfDocumentParser(ocr_engine=ocr_engine, diagram_analyzer=diagram_analyzer),
     ]
-    return IngestionPipeline(fs, parsers, _make_embedder(config), config)
+
+
+def _ingest_pipeline(
+    args: argparse.Namespace, config: Config, fs: RealFileSystem
+) -> IngestionPipeline:
+    return IngestionPipeline(fs, _build_parsers(args, config), _make_embedder(config), config)
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    from ..web import WebApp, serve
+
+    config = _config_from_args(args)
+    fs = RealFileSystem()
+    app = WebApp(
+        config,
+        config.index_path,
+        fs,
+        _build_parsers(args, config),
+        _make_embedder(config),
+        _make_llm(config),
+    )
+    serve(app, host=args.host, port=args.port)
+    return 0
 
 
 def _load_index(fs: RealFileSystem, path: str) -> Index | None:

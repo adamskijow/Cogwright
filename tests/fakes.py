@@ -93,6 +93,9 @@ class FakeFileSystem:
     def write_text(self, path: str, data: str) -> None:
         self._files[path] = data.encode("utf-8")
 
+    def write_bytes(self, path: str, data: bytes) -> None:
+        self._files[path] = bytes(data)
+
     def exists(self, path: str) -> bool:
         return path in self._files or any(
             key.startswith(path.rstrip("/") + "/") for key in self._files
