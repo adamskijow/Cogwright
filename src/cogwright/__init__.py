@@ -8,4 +8,4 @@ that wires real input and output. The core has no dependency on any specific
 model, vector database, or web framework.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
