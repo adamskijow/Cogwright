@@ -16,16 +16,20 @@ and get a step-by-step answer grounded only in those documents, with citations t
 the source page. Bare identifiers resolve too: an alarm code, an error code, or a
 part number jumps straight to the passage that defines it.
 
-It runs locally against a model endpoint you choose. Your documents and the index
-stay on your machine, and the only network calls go to that one endpoint.
+It runs locally against an OpenAI-compatible model endpoint you choose, so your
+documents and the index stay on your machine and the only network calls go to
+that one endpoint.
+
+Install it, point `--base-url` at your model server (local or hosted), and set
+the model names to whatever it serves:
 
 ```sh
-uv sync
+pip install cogwright-rag
 
-uv run cogwright ingest ./manuals \
+cogwright ingest ./manuals \
   --base-url http://localhost:8000/v1 --embedding-model nomic-embed-text
 
-uv run cogwright ask "How do I clear alarm 204?" \
+cogwright ask "How do I clear alarm 204?" \
   --base-url http://localhost:8000/v1 \
   --llm-model llama3.2:1b --embedding-model nomic-embed-text --min-score 0.55
 ```
@@ -43,7 +47,8 @@ Sources:
 ```
 
 When the corpus does not contain the answer, Cogwright says so instead of
-inventing one.
+inventing one. Prefer a browser? `cogwright serve` opens the same answers in a
+local web interface, with a corpus manager for adding and removing documents.
 
 ## How it works
 
@@ -259,8 +264,10 @@ tree MIT-compatible. See [CONTRIBUTING.md](CONTRIBUTING.md) to work on it.
 
 ## Status
 
-Text and born-digital PDF ingestion, hybrid retrieval, and grounded cited answers
-are complete and validated against a live local model. Scanned-page OCR, diagram
-transcription, and the evaluation harness have since landed. Region-level diagram
-cropping, tuning for low-quality scans, and more corpus formats are future work,
-and each fits an existing seam.
+Released and validated against a live local model: text and born-digital PDF
+ingestion, hybrid retrieval with identifier lookup, grounded cited answers, the
+structured-JSON answer mode, incremental index updates, the evaluation harness,
+and the local web interface. Scanned-page OCR and diagram transcription are
+available behind their seams. Region-level diagram cropping, tuning for
+low-quality scans, and more corpus formats are future work, each fitting an
+existing seam.
